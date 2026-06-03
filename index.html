@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hỏi đáp quy định NHNN</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="chat-panel" aria-label="Hỏi đáp quy định NHNN">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">GitHub Pages chatbot</p>
+            <h1>Hỏi đáp quy định NHNN</h1>
+          </div>
+          <span id="connectionStatus" class="status-badge">Chưa cấu hình</span>
+        </header>
+
+        <div id="messages" class="messages" aria-live="polite">
+          <article class="message bot">
+            <div class="avatar">AI</div>
+            <div class="bubble">
+              <p>Bạn nhập câu hỏi về quy định. Hệ thống sẽ gửi câu hỏi sang Apps Script, đọc dữ liệu Google Sheet và dùng AI để trả lời.</p>
+            </div>
+          </article>
+        </div>
+
+        <form id="questionForm" class="composer">
+          <label class="sr-only" for="questionInput">Nhập câu hỏi</label>
+          <textarea
+            id="questionInput"
+            name="question"
+            rows="3"
+            placeholder="Ví dụ: Cá nhân cư trú được cho vay ra nước ngoài không?"
+            required
+          ></textarea>
+          <button id="sendButton" type="submit">Gửi câu hỏi</button>
+        </form>
+      </section>
+
+      <aside class="setup-panel">
+        <h2>Trang public</h2>
+        <ol>
+          <li>Giao diện này public bằng <strong>GitHub Pages</strong>.</li>
+          <li>Backend là <strong>Apps Script Web App</strong>.</li>
+          <li>Dữ liệu lấy từ Google Sheet <strong>FAQ</strong> và <strong>VANBAN</strong>.</li>
+          <li>Lịch sử hỏi đáp được ghi vào sheet <strong>LOG</strong>.</li>
+        </ol>
+        <p class="note">Nếu trang báo chưa cấu hình, hãy dán URL Apps Script kết thúc bằng <strong>/exec</strong> vào file <strong>config.js</strong>.</p>
+      </aside>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
