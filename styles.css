@@ -54,8 +54,17 @@ body {
 }
 
 .topic-panel {
-  align-self: start;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-self: stretch;
+  min-height: calc(100vh - 48px);
   padding: 18px;
+}
+
+.topic-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .topic-panel h2 {
@@ -90,6 +99,15 @@ body {
   border-color: #8bd2c4;
   color: var(--accent-strong);
   background: rgba(238, 248, 245, 0.94);
+}
+
+.author {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .chat-panel {
@@ -288,6 +306,7 @@ button:disabled {
 
   .topic-panel {
     order: -1;
+    min-height: auto;
   }
 
   .chat-panel {
