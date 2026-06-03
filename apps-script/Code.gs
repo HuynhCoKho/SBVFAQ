@@ -107,23 +107,32 @@ function readSheetObjects_(spreadsheet, sheetName) {
   var sheet = spreadsheet.getSheetByName(sheetName);
   if (!sheet) throw new Error('Không tìm thấy sheet ' + sheetName);
 
-  var values = sheet.getDataRange().getDisplayValues();
+  var range = sheet.getDataRange();
+  var values = range.getDisplayValues();
+  var richTextValues = range.getRichTextValues();
   if (values.length < 2) return [];
 
   var headers = values[0].map(function (header) {
     return String(header || '').trim();
   });
 
-  return values.slice(1)
-    .filter(function (row) {
-      return row.some(function (cell) {
+  return values
+    .map(function (row, rowIndex) {
+      return {
+        row: row,
+        richTextRow: richTextValues[rowIndex]
+      };
+    })
+    .slice(1)
+    .filter(function (entry) {
+      return entry.row.some(function (cell) {
         return String(cell || '').trim();
       });
     })
-    .map(function (row) {
+    .map(function (entry) {
       var item = {};
       headers.forEach(function (header, index) {
-        if (header) item[header] = String(row[index] || '').trim();
+        if (header) item[header] = formatCellValue_(entry.row[index], entry.richTextRow[index]);
       });
       return item;
     });
@@ -146,6 +155,8 @@ function askAi_(question, data) {
     'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. ' +
     'Nếu dữ liệu chưa đủ để kết luận, hãy nói rõ là chưa đủ thông tin trong bảng dữ liệu. ' +
     'Trả lời bằng tiếng Việt có dấu, ngắn gọn, có căn cứ nguồn nếu có. ' +
+    'Nếu câu trả lời trong dữ liệu có link dạng [tên link](URL) hoặc URL thì phải giữ nguyên link đó trong câu trả lời. ' +
+    'Không được chỉ nói chung chung là "truy cập đường link" khi dữ liệu đã có URL cụ thể. ' +
     'Cuối câu trả lời luôn có dòng "Nguồn: ...". ' +
     'Nếu mục dữ liệu có "NGUỒN TRÍCH DẪN" thì dùng đúng nội dung đó làm nguồn, không dùng mã FAQ #... thay cho nguồn. ' +
     'Nếu có nhiều nguồn phù hợp, ngăn cách bằng dấu chấm phẩy.\n\n' +
@@ -228,6 +239,38 @@ function pick_(row, keys) {
     if (row[keys[i]]) return row[keys[i]];
   }
   return '';
+}
+
+function formatCellValue_(displayValue, richTextValue) {
+  var text = String(displayValue || '').trim();
+  if (!richTextValue) return text;
+
+  var cellUrl = richTextValue.getLinkUrl && richTextValue.getLinkUrl();
+  if (cellUrl && text && text.indexOf(cellUrl) === -1) {
+    return '[' + text + '](' + cellUrl + ')';
+  }
+
+  var runs = richTextValue.getRuns ? richTextValue.getRuns() : [];
+  if (!runs || !runs.length) return text;
+
+  var linkedParts = [];
+  runs.forEach(function (run) {
+    var runText = String(run.getText() || '').trim();
+    var url = run.getLinkUrl && run.getLinkUrl();
+
+    if (runText && url && text.indexOf(url) === -1) {
+      linkedParts.push('[' + runText + '](' + url + ')');
+    }
+  });
+
+  if (!linkedParts.length) return text;
+
+  var result = text;
+  linkedParts.forEach(function (linkedPart) {
+    if (result.indexOf(linkedPart) === -1) result += ' ' + linkedPart;
+  });
+
+  return result.trim();
 }
 
 function formatPart_(label, value) {
