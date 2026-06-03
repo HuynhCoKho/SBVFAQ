@@ -40,6 +40,20 @@
     });
   }
 
+  function applyRemoteLinks(payload) {
+    if (!payload || !payload.ok || !payload.links) return;
+
+    if (Array.isArray(payload.links.topics) && payload.links.topics.length) {
+      config.TOPIC_LINKS = payload.links.topics;
+    }
+
+    if (Array.isArray(payload.links.tools) && payload.links.tools.length) {
+      config.TOOL_LINKS = payload.links.tools;
+    }
+
+    renderTopicPanel();
+  }
+
   function addMessage(role, text) {
     var article = document.createElement('article');
     article.className = 'message ' + role;
@@ -114,6 +128,20 @@
   }
 
   function askAppsScript(question) {
+    return fetchAppsScript({ question: question }, 30000);
+  }
+
+  function loadRemoteLinks() {
+    if (!endpoint) return;
+
+    fetchAppsScript({ action: 'links' }, 12000)
+      .then(applyRemoteLinks)
+      .catch(function () {
+        renderTopicPanel();
+      });
+  }
+
+  function fetchAppsScript(params, timeoutMs) {
     return new Promise(function (resolve, reject) {
       if (!endpoint) {
         reject(new Error('Bạn chưa dán URL Apps Script vào file config.js.'));
@@ -126,7 +154,7 @@
       var timer = window.setTimeout(function () {
         cleanup();
         reject(new Error('Quá 30 giây chưa nhận được phản hồi. Kiểm tra lại URL /exec và bản deploy Apps Script.'));
-      }, 30000);
+      }, timeoutMs || 30000);
 
       function cleanup() {
         window.clearTimeout(timer);
@@ -140,7 +168,11 @@
       };
 
       var separator = endpoint.indexOf('?') === -1 ? '?' : '&';
-      script.src = endpoint + separator + 'question=' + encodeURIComponent(question) + '&callback=' + encodeURIComponent(callbackName);
+      var query = Object.keys(params || {}).map(function (key) {
+        return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
+      });
+      query.push('callback=' + encodeURIComponent(callbackName));
+      script.src = endpoint + separator + query.join('&');
       script.onerror = function () {
         cleanup();
         reject(new Error('Không tải được Apps Script. Kiểm tra URL /exec hoặc quyền truy cập Web App.'));
@@ -184,5 +216,6 @@
   });
 
   renderTopicPanel();
+  loadRemoteLinks();
   setStatus(endpoint ? 'Sẵn sàng' : 'Chưa cấu hình', endpoint ? 'ok' : 'error');
 })();
