@@ -6,11 +6,38 @@
   var button = document.getElementById('sendButton');
   var messages = document.getElementById('messages');
   var statusBadge = document.getElementById('connectionStatus');
+  var topicList = document.getElementById('topicList');
+  var toolList = document.getElementById('toolList');
   var requestId = 0;
 
   function setStatus(text, mode) {
     statusBadge.textContent = text;
     statusBadge.dataset.mode = mode || '';
+  }
+
+  function createLink(item) {
+    var link = document.createElement('a');
+    link.className = 'topic-link';
+    link.href = item.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = item.title;
+    return link;
+  }
+
+  function renderTopicPanel() {
+    if (!topicList || !toolList) return;
+
+    topicList.textContent = '';
+    toolList.textContent = '';
+
+    (config.TOPIC_LINKS || []).forEach(function (item) {
+      topicList.appendChild(createLink(item));
+    });
+
+    (config.TOOL_LINKS || []).forEach(function (item) {
+      toolList.appendChild(createLink(item));
+    });
   }
 
   function addMessage(role, text) {
@@ -156,5 +183,6 @@
     }
   });
 
+  renderTopicPanel();
   setStatus(endpoint ? 'Sẵn sàng' : 'Chưa cấu hình', endpoint ? 'ok' : 'error');
 })();
