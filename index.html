@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Dữ liệu Tra cứu</title>
+    <meta
+      name="description"
+      content="Chat bot AI tra cứu FAQ từ Google Sheet và lưu lịch sử hỏi đáp vào sheet Log."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero" aria-labelledby="app-title">
+        <div>
+          <p class="eyebrow">GitHub Pages + Apps Script + Google Sheet + AI API</p>
+          <h1 id="app-title">Chat bot AI tra cứu FAQ</h1>
+          <p class="intro">
+            Đặt câu hỏi bằng tiếng Việt. Bot sẽ đọc dữ liệu sheet <strong>FAQ</strong>,
+            nhờ AI tổng hợp câu trả lời theo dữ liệu có sẵn và lưu vết vào sheet
+            <strong>Log</strong>.
+          </p>
+        </div>
+        <a
+          class="sheet-link"
+          href="https://docs.google.com/spreadsheets/d/1FInDbuWzXhh6vJ-EqaYxA5aIxZ19pVrrG_lS0imOhY4/edit?usp=drive_link"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Mở Google Sheet
+        </a>
+      </section>
+
+      <section class="chat-card" aria-label="Khung chat AI">
+        <div id="messages" class="messages" aria-live="polite">
+          <article class="message bot">
+            <div class="avatar" aria-hidden="true">AI</div>
+            <div class="bubble">
+              <p>
+                Xin chào! Hãy hỏi nội dung cần tra cứu. Ví dụ:
+                <button class="sample" type="button">Cá nhân cư trú được cho vay ra nước ngoài không?</button>
+              </p>
+            </div>
+          </article>
+        </div>
+
+        <form id="chat-form" class="composer">
+          <label class="sr-only" for="question">Nhập câu hỏi</label>
+          <textarea
+            id="question"
+            name="question"
+            rows="2"
+            maxlength="1000"
+            placeholder="Nhập câu hỏi của bạn..."
+            required
+          ></textarea>
+          <button id="send-button" type="submit">Gửi</button>
+        </form>
+        <p id="status" class="status" role="status"></p>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
