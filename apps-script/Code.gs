@@ -300,10 +300,24 @@ function ensureLogHeader_(sheet) {
   if (needsHeader) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 }
 
+function ensureLinksHeader_(sheet) {
+  var headers = ['TYPE', 'TITLE', 'URL', 'STATUS'];
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    return;
+  }
+
+  var currentHeaders = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+  var needsHeader = headers.some(function (header, index) { return currentHeaders[index] !== header; });
+  if (needsHeader) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+}
+
 function setupAuthorization() {
   var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   var logSheet = spreadsheet.getSheetByName(LOG_SHEET_NAME) || spreadsheet.insertSheet(LOG_SHEET_NAME);
+  var linksSheet = spreadsheet.getSheetByName(LINKS_SHEET_NAME) || spreadsheet.insertSheet(LINKS_SHEET_NAME);
   ensureLogHeader_(logSheet);
+  ensureLinksHeader_(linksSheet);
   loadKnowledge_();
   loadLinks_();
   return 'Đã cấp quyền và kết nối được Google Sheet.';
