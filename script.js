@@ -114,6 +114,21 @@
     return article;
   }
 
+  function addThinkingMessage() {
+    var article = addMessage('bot thinking', 'Đang suy nghĩ');
+    var paragraph = article.querySelector('p');
+    if (paragraph) {
+      paragraph.innerHTML = '<span>Đang suy nghĩ</span><span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+    }
+    return article;
+  }
+
+  function removeMessage(article) {
+    if (article && article.parentNode) {
+      article.parentNode.removeChild(article);
+    }
+  }
+
   function addLinkedText(container, text) {
     var pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
     var lastIndex = 0;
@@ -161,13 +176,17 @@
   }
 
   function askAppsScript(question) {
-    return fetchAppsScript({ question: question }, 30000);
+    return fetchAppsScript({
+      question: question
+    }, 30000);
   }
 
   function loadRemoteLinks() {
     if (!endpoint) return;
 
-    fetchAppsScript({ action: 'links' }, 12000)
+    fetchAppsScript({
+      action: 'links'
+    }, 12000)
       .then(applyRemoteLinks)
       .catch(function () {
         renderTopicPanel();
@@ -222,16 +241,19 @@
     if (!question) return;
 
     addMessage('user', question);
+    var thinkingMessage = addThinkingMessage();
     input.value = '';
     setBusy(true);
-    setStatus('Đang gửi', 'pending');
+    setStatus('Đang suy nghĩ', 'pending');
 
     askAppsScript(question)
       .then(function (payload) {
+        removeMessage(thinkingMessage);
         addMessage('bot', normalizeResponse(payload));
         setStatus('Đã kết nối', 'ok');
       })
       .catch(function (error) {
+        removeMessage(thinkingMessage);
         addMessage('bot', error.message);
         setStatus('Cần kiểm tra', 'error');
       })
