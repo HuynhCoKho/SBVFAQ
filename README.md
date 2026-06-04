@@ -104,13 +104,13 @@ Trong `config.js`:
 
 ```js
 GITHUB_SPONSORS_URL: 'https://github.com/sponsors/HuynhCoKho',
-MOMO_QR_IMAGE_URL: 'assets/momo-qr.png'
+MOMO_QR_IMAGE_URL: 'assets/momo-qr.svg'
 ```
 
 Để hiện đúng mã QR MoMo, thêm ảnh QR vào repo tại:
 
 ```text
-assets/momo-qr.png
+assets/momo-qr.svg
 ```
 
 Người dùng bấm `MoMo QR` trên panel trái thì popup QR sẽ mở ra.
