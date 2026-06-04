@@ -8,6 +8,11 @@
   var statusBadge = document.getElementById('connectionStatus');
   var topicList = document.getElementById('topicList');
   var toolList = document.getElementById('toolList');
+  var githubSponsor = document.getElementById('githubSponsor');
+  var momoSponsor = document.getElementById('momoSponsor');
+  var momoModal = document.getElementById('momoModal');
+  var momoQrImage = document.getElementById('momoQrImage');
+  var qrFallback = document.getElementById('qrFallback');
   var requestId = 0;
 
   function setStatus(text, mode) {
@@ -23,6 +28,34 @@
     link.rel = 'noopener noreferrer';
     link.textContent = item.title;
     return link;
+  }
+
+  function setupSponsors() {
+    if (githubSponsor) {
+      githubSponsor.href = config.GITHUB_SPONSORS_URL || 'https://github.com/sponsors/HuynhCoKho';
+    }
+
+    if (momoQrImage) {
+      momoQrImage.src = config.MOMO_QR_IMAGE_URL || 'assets/momo-qr.png';
+      momoQrImage.addEventListener('error', function () {
+        momoQrImage.hidden = true;
+        if (qrFallback) qrFallback.hidden = false;
+      });
+      momoQrImage.addEventListener('load', function () {
+        momoQrImage.hidden = false;
+        if (qrFallback) qrFallback.hidden = true;
+      });
+    }
+  }
+
+  function openMomoModal() {
+    if (!momoModal) return;
+    momoModal.hidden = false;
+  }
+
+  function closeMomoModal() {
+    if (!momoModal) return;
+    momoModal.hidden = true;
   }
 
   function renderTopicPanel() {
@@ -215,6 +248,23 @@
     }
   });
 
+  if (momoSponsor) {
+    momoSponsor.addEventListener('click', openMomoModal);
+  }
+
+  if (momoModal) {
+    momoModal.addEventListener('click', function (event) {
+      if (event.target && event.target.hasAttribute('data-close-modal')) {
+        closeMomoModal();
+      }
+    });
+  }
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeMomoModal();
+  });
+
+  setupSponsors();
   renderTopicPanel();
   loadRemoteLinks();
   setStatus(endpoint ? 'Sẵn sàng' : 'Chưa cấu hình', endpoint ? 'ok' : 'error');
