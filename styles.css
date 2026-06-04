@@ -59,7 +59,7 @@ body {
 
 .topic-panel {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   align-self: stretch;
   height: calc(100vh - 48px);
   height: calc(100dvh - 48px);
@@ -107,6 +107,54 @@ body {
   border-color: #8bd2c4;
   color: var(--accent-strong);
   background: rgba(238, 248, 245, 0.94);
+}
+
+.support-box {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.support-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.support-action {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+}
+
+.support-action:hover {
+  border-color: #8bd2c4;
+  color: var(--accent-strong);
+  background: rgba(238, 248, 245, 0.95);
+}
+
+.support-action.github {
+  color: #24292f;
+}
+
+.support-action.momo {
+  color: #a50064;
 }
 
 .author {
@@ -297,6 +345,85 @@ button:hover {
 button:disabled {
   cursor: wait;
   opacity: 0.68;
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.modal-card {
+  position: relative;
+  width: min(360px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+}
+
+.modal-card h2 {
+  margin: 0 34px 16px 0;
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink);
+  background: #ffffff;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.qr-frame {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.qr-frame img {
+  display: block;
+  width: min(240px, 100%);
+  height: auto;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.qr-fallback {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .sr-only {
