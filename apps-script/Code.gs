@@ -4,7 +4,8 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v5';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v6';
+var DIRECT_FAQ_MIN_SCORE = 36;
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -170,6 +171,9 @@ function readSheetObjects_(spreadsheet, sheetName) {
 }
 
 function askAi_(question, data) {
+  var directAnswer = answerDirectlyFromFaq_(question, data.faq);
+  if (directAnswer) return directAnswer;
+
   var apiKey = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
   if (!apiKey) throw new Error('Chưa cấu hình OPENAI_API_KEY trong Apps Script > Project Settings > Script properties.');
 
@@ -198,7 +202,8 @@ function askAi_(question, data) {
     muteHttpExceptions: true,
     payload: JSON.stringify({
       model: model,
-      temperature: 0.2,
+      temperature: 0.1,
+      max_tokens: 700,
       messages: [
         { role: 'system', content: 'Bạn trả lời như một trợ lý pháp lý nội bộ, không suy diễn ngoài dữ liệu.' },
         { role: 'user', content: prompt }
@@ -214,6 +219,33 @@ function askAi_(question, data) {
   return json.choices[0].message.content.trim();
 }
 
+function answerDirectlyFromFaq_(question, faqRows) {
+  var ranked = rankRows_(question, faqRows || [], ['QUESTION', 'ANSWER', 'KEYWORDS', 'GROUP', 'SOURCE']);
+  if (!ranked.length || ranked[0].score < DIRECT_FAQ_MIN_SCORE) return '';
+
+  var top = ranked[0];
+  var second = ranked[1];
+  var normalizedQuestion = normalizeText_(question);
+  var normalizedTopQuestion = normalizeText_(pick_(top.row, ['QUESTION']));
+  var exactish = normalizedTopQuestion && (
+    normalizedTopQuestion.indexOf(normalizedQuestion) >= 0 ||
+    normalizedQuestion.indexOf(normalizedTopQuestion) >= 0
+  );
+
+  if (!exactish && second && top.score - second.score < 8) return '';
+
+  var answer = pick_(top.row, ['ANSWER', 'CÂU TRẢ LỜI', 'CAU TRA LOI']);
+  if (!answer) return '';
+
+  var source = pick_(top.row, ['SOURCE', 'NGUỒN', 'NGUON']);
+  var id = pick_(top.row, ['ID']);
+  if (!source && id) source = 'FAQ #' + id;
+  if (!source) source = 'FAQ';
+
+  if (/nguồn\s*:/i.test(answer)) return answer;
+  return answer + '\n\nNguồn: ' + source;
+}
+
 function selectRelevantData_(question, data) {
   var faqRanked = rankRows_(question, data.faq, ['QUESTION', 'ANSWER', 'KEYWORDS', 'GROUP', 'SOURCE']);
   var vanbanRanked = rankRows_(question, data.vanban, ['NỘI DUNG', 'NOI DUNG', 'TÊN VĂN BẢN', 'TEN VAN BAN', 'SỐ VĂN BẢN', 'SO VAN BAN']);
@@ -221,8 +253,8 @@ function selectRelevantData_(question, data) {
   var vanbanMatches = vanbanRanked.filter(function (item) { return item.score > 0; });
 
   return {
-    faq: (faqMatches.length ? faqMatches : faqRanked).slice(0, 8).map(function (item) { return item.row; }),
-    vanban: (vanbanMatches.length ? vanbanMatches : vanbanRanked).slice(0, 12).map(function (item) { return item.row; })
+    faq: (faqMatches.length ? faqMatches : faqRanked).slice(0, 5).map(function (item) { return item.row; }),
+    vanban: (vanbanMatches.length ? vanbanMatches : vanbanRanked).slice(0, 5).map(function (item) { return item.row; })
   };
 }
 
@@ -271,18 +303,18 @@ function buildImportantPhrases_(normalizedQuestion) {
 }
 
 function buildContext_(data) {
-  var faqText = data.faq.map(function (row, index) {
+  var faqText = data.faq.slice(0, 5).map(function (row, index) {
     return [
       'MÃ THAM CHIẾU: FAQ #' + (index + 1),
       'GROUP: ' + pick_(row, ['GROUP']),
       'QUESTION: ' + pick_(row, ['QUESTION']),
-      'ANSWER: ' + pick_(row, ['ANSWER']),
+      'ANSWER: ' + compactText_(pick_(row, ['ANSWER']), 1600),
       'NGUỒN TRÍCH DẪN: ' + pick_(row, ['SOURCE', 'NGUỒN', 'NGUON']),
       'KEYWORDS: ' + pick_(row, ['KEYWORDS'])
     ].join('\n');
   }).join('\n---\n');
 
-  var vanbanText = data.vanban.map(function (row, index) {
+  var vanbanText = data.vanban.slice(0, 5).map(function (row, index) {
     var soVanBan = pick_(row, ['SỐ VĂN BẢN', 'SO VAN BAN']);
     var tenVanBan = pick_(row, ['TÊN VĂN BẢN', 'TEN VAN BAN']);
     var diemKhoanDieu = [
@@ -298,11 +330,17 @@ function buildContext_(data) {
       'TEN VAN BAN: ' + tenVanBan,
       'DIEM/KHOAN/DIEU: ' + diemKhoanDieu,
       'NGUỒN TRÍCH DẪN: ' + citation,
-      'NOI DUNG: ' + pick_(row, ['NỘI DUNG', 'NOI DUNG'])
+      'NOI DUNG: ' + compactText_(pick_(row, ['NỘI DUNG', 'NOI DUNG']), 1800)
     ].join('\n');
   }).join('\n---\n');
 
   return 'FAQ:\n' + faqText + '\n\nVANBAN:\n' + vanbanText;
+}
+
+function compactText_(value, maxLength) {
+  var text = String(value || '').trim();
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength).trim() + '...';
 }
 
 function appendLog_(question, answer, meta) {
@@ -395,7 +433,7 @@ function normalizeText_(value) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
+    .replace(/\u0111/g, 'd')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
