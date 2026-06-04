@@ -96,9 +96,26 @@ Ví dụ:
 - Giữ hyperlink ẩn trong Google Sheet và trả về dạng link bấm được.
 - Trích nguồn theo cột `SOURCE` hoặc nguồn ghép từ `VANBAN`.
 - Panel trái và vùng chat có thanh cuộn riêng trong một màn hình.
-- Có thể quản lý link chủ đề/tool bằng sheet `LINKS` thay vì sửa code.
+- Có nút GitHub Sponsor và nút MoMo QR trong panel trái.
 
-## 6. Test nhanh
+## 6. Sponsor và MoMo QR
+
+Trong `config.js`:
+
+```js
+GITHUB_SPONSORS_URL: 'https://github.com/sponsors/HuynhCoKho',
+MOMO_QR_IMAGE_URL: 'assets/momo-qr.png'
+```
+
+Để hiện đúng mã QR MoMo, thêm ảnh QR vào repo tại:
+
+```text
+assets/momo-qr.png
+```
+
+Người dùng bấm `MoMo QR` trên panel trái thì popup QR sẽ mở ra.
+
+## 7. Test nhanh
 
 Mở GitHub Pages:
 
