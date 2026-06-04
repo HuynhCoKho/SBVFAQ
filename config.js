@@ -1,5 +1,7 @@
 window.SBV_FAQ_CONFIG = {
   APPS_SCRIPT_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbx-PdqyxSXY097q7dLB9mXJOxKmH9Aps9gxMiR7e1JQflvF8SFUy2I6Zhbnt-qORUG6_g/exec',
+  GITHUB_SPONSORS_URL: 'https://github.com/sponsors/HuynhCoKho',
+  MOMO_QR_IMAGE_URL: 'assets/momo-qr.png',
   TOPIC_LINKS: [
     {
       title: 'Vay trả nợ nước ngoài',
