@@ -4,7 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v6';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v7';
 var DIRECT_FAQ_MIN_SCORE = 36;
 
 function doGet(e) {
@@ -172,7 +172,7 @@ function readSheetObjects_(spreadsheet, sheetName) {
 
 function askAi_(question, data) {
   var directAnswer = answerDirectlyFromFaq_(question, data.faq);
-  if (directAnswer) return directAnswer;
+  if (directAnswer) return finalizeAnswer_(question, directAnswer);
 
   var apiKey = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
   if (!apiKey) throw new Error('Chưa cấu hình OPENAI_API_KEY trong Apps Script > Project Settings > Script properties.');
@@ -189,6 +189,8 @@ function askAi_(question, data) {
     'Trả lời bằng tiếng Việt có dấu, ngắn gọn, có căn cứ nguồn nếu có. ' +
     'Nếu câu trả lời trong dữ liệu có link dạng [tên link](URL) hoặc URL thì phải giữ nguyên link đó trong câu trả lời. ' +
     'Không được chỉ nói chung chung là "truy cập đường link" khi dữ liệu đã có URL cụ thể. ' +
+    'Riêng các thông báo về việc báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ được xem là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không được khái quát thành kết luận mọi báo cáo nộp trễ/quá hạn đều không sao. ' +
+    'Nếu người dùng hỏi chung về báo cáo quá hạn/nộp trễ, phải nêu rõ các kỳ khác vẫn có thể bị xem xét chế tài xử phạt theo quy định áp dụng nếu dữ liệu có căn cứ. ' +
     'Cuối câu trả lời luôn có dòng "Nguồn: ...". ' +
     'Nếu mục dữ liệu có "NGUỒN TRÍCH DẪN" thì dùng đúng nội dung đó làm nguồn, không dùng mã FAQ #... thay cho nguồn. ' +
     'Nếu có nhiều nguồn phù hợp, ngăn cách bằng dấu chấm phẩy.\n\n' +
@@ -216,7 +218,7 @@ function askAi_(question, data) {
   var json = JSON.parse(body);
   if (status < 200 || status >= 300) throw new Error((json.error && json.error.message) || ('OpenAI API lỗi HTTP ' + status));
 
-  return json.choices[0].message.content.trim();
+  return finalizeAnswer_(question, json.choices[0].message.content.trim());
 }
 
 function answerDirectlyFromFaq_(question, faqRows) {
@@ -341,6 +343,42 @@ function compactText_(value, maxLength) {
   var text = String(value || '').trim();
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength).trim() + '...';
+}
+
+function finalizeAnswer_(question, answer) {
+  return addLateReportScopeWarning_(question, answer);
+}
+
+function addLateReportScopeWarning_(question, answer) {
+  var normalizedQuestion = normalizeText_(question);
+  var normalizedAnswer = normalizeText_(answer);
+  var asksLateReport =
+    normalizedQuestion.indexOf('bao cao') >= 0 &&
+    (
+      normalizedQuestion.indexOf('qua han') >= 0 ||
+      normalizedQuestion.indexOf('nop tre') >= 0 ||
+      normalizedQuestion.indexOf('cham nop') >= 0 ||
+      normalizedQuestion.indexOf('tre han') >= 0
+    );
+  var answerLooksLikeOneOffException =
+    (
+      normalizedAnswer.indexOf('chuyen doi du lieu') >= 0 ||
+      normalizedAnswer.indexOf('trang dien tu') >= 0 ||
+      normalizedAnswer.indexOf('thong bao tai trang chu') >= 0
+    ) &&
+    (
+      normalizedAnswer.indexOf('khong sao') >= 0 ||
+      normalizedAnswer.indexOf('yen tam') >= 0 ||
+      normalizedAnswer.indexOf('khong anh huong') >= 0
+    );
+  var questionAlreadyScoped =
+    normalizedQuestion.indexOf('thang 4 2026') >= 0 ||
+    normalizedQuestion.indexOf('04 2026') >= 0 ||
+    normalizedQuestion.indexOf('4 2026') >= 0;
+
+  if (!asksLateReport || !answerLooksLikeOneOffException || questionAlreadyScoped) return answer;
+
+  return answer + '\n\nLưu ý phạm vi: nội dung trên chỉ nên hiểu cho trường hợp báo cáo kỳ tháng 4/2026 bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử theo thông báo nguồn. Với các kỳ báo cáo khác, việc nộp trễ/quá hạn vẫn có thể bị xem xét chế tài xử phạt theo quy định áp dụng.';
 }
 
 function appendLog_(question, answer, meta) {
