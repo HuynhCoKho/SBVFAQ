@@ -4,6 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v5';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -80,7 +81,7 @@ function askFromUi(question, clientInfo) {
 
 function loadKnowledge_() {
   var cache = CacheService.getScriptCache();
-  var cached = cache.get('knowledge-v4');
+  var cached = cache.get(KNOWLEDGE_CACHE_KEY);
   if (cached) return JSON.parse(cached);
 
   var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -95,7 +96,7 @@ function loadKnowledge_() {
     })
   };
 
-  safeCachePut_(cache, 'knowledge-v4', data);
+  safeCachePut_(cache, KNOWLEDGE_CACHE_KEY, data);
   return data;
 }
 
@@ -179,6 +180,7 @@ function askAi_(question, data) {
     'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. ' +
     'Ưu tiên dữ liệu FAQ trước. Nếu FAQ đã có câu trả lời phù hợp, trả lời chủ yếu theo FAQ và chỉ dùng VANBAN để bổ sung căn cứ khi cần. ' +
     'Chỉ dùng VANBAN làm nguồn chính khi FAQ không có thông tin đủ phù hợp. ' +
+    'Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Nếu người dùng không hỏi về thay đổi/điều chỉnh thì không dùng mục đăng ký thay đổi làm câu trả lời chính. ' +
     'Nếu dữ liệu chưa đủ để kết luận, hãy nói rõ là chưa đủ thông tin trong bảng dữ liệu. ' +
     'Trả lời bằng tiếng Việt có dấu, ngắn gọn, có căn cứ nguồn nếu có. ' +
     'Nếu câu trả lời trong dữ liệu có link dạng [tên link](URL) hoặc URL thì phải giữ nguyên link đó trong câu trả lời. ' +
@@ -227,18 +229,45 @@ function selectRelevantData_(question, data) {
 function rankRows_(question, rows, keys) {
   var normalizedQuestion = normalizeText_(question);
   var tokens = normalizedQuestion.split(' ').filter(function (token) { return token.length >= 2; });
+  var importantPhrases = buildImportantPhrases_(normalizedQuestion);
+  var questionHasChangeIntent = /\b(thay doi|dieu chinh)\b/.test(normalizedQuestion);
 
   return rows.map(function (row, index) {
     var haystack = normalizeText_(keys.map(function (key) { return row[key] || ''; }).join(' '));
-    var score = normalizedQuestion && haystack.indexOf(normalizedQuestion) >= 0 ? 30 : 0;
+    var score = normalizedQuestion && haystack.indexOf(normalizedQuestion) >= 0 ? 80 : 0;
+
     tokens.forEach(function (token) {
-      if (haystack.indexOf(token) >= 0) score += token.length > 3 ? 2 : 1;
+      if (haystack.indexOf(token) >= 0) score += token.length > 3 ? 3 : 1;
     });
+
+    importantPhrases.forEach(function (phrase) {
+      if (haystack.indexOf(phrase) >= 0) score += phrase.split(' ').length * 12;
+    });
+
+    if (!questionHasChangeIntent && /\b(thay doi|dieu chinh)\b/.test(haystack)) score -= 35;
+
     return { row: row, score: score, index: index };
   }).sort(function (a, b) {
     if (b.score !== a.score) return b.score - a.score;
     return a.index - b.index;
   });
+}
+
+function buildImportantPhrases_(normalizedQuestion) {
+  var words = normalizedQuestion.split(' ').filter(function (word) { return word.length >= 2; });
+  var phrases = [];
+
+  for (var size = Math.min(5, words.length); size >= 2; size -= 1) {
+    for (var index = 0; index <= words.length - size; index += 1) {
+      phrases.push(words.slice(index, index + size).join(' '));
+    }
+  }
+
+  ['dang ky khoan vay', 'thoi han dang ky', 'dang ky vay nuoc ngoai', 'ho so dang ky'].forEach(function (phrase) {
+    if (normalizedQuestion.indexOf(phrase) >= 0 && phrases.indexOf(phrase) === -1) phrases.push(phrase);
+  });
+
+  return phrases;
 }
 
 function buildContext_(data) {
