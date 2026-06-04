@@ -178,7 +178,7 @@
   function askAppsScript(question) {
     return fetchAppsScript({
       question: question
-    }, 30000);
+    }, 90000);
   }
 
   function loadRemoteLinks() {
@@ -203,9 +203,10 @@
       requestId += 1;
       var callbackName = 'sbvFaqCallback_' + Date.now() + '_' + requestId;
       var script = document.createElement('script');
+      var waitSeconds = Math.round((timeoutMs || 30000) / 1000);
       var timer = window.setTimeout(function () {
         cleanup();
-        reject(new Error('Quá 30 giây chưa nhận được phản hồi. Kiểm tra lại URL /exec và bản deploy Apps Script.'));
+        reject(new Error('Quá ' + waitSeconds + ' giây chưa nhận được phản hồi. Câu hỏi có thể đang xử lý lâu; vui lòng thử lại hoặc kiểm tra bản deploy Apps Script.'));
       }, timeoutMs || 30000);
 
       function cleanup() {
