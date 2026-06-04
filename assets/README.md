@@ -1,11 +1,13 @@
-Đặt ảnh QR MoMo tại đây với tên:
+QR MoMo đang dùng trên web:
 
 ```text
-momo-qr.png
+momo-qr.svg
 ```
 
 Giao diện sẽ đọc ảnh này từ đường dẫn:
 
 ```text
-assets/momo-qr.png
+assets/momo-qr.svg
 ```
+
+File `Momo-qr.jpg` là ảnh gốc lưu tại local.
