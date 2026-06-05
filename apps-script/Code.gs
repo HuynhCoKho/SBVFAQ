@@ -42,7 +42,6 @@ function askFromUi(question, clientInfo) {
   question = String(question || '').trim();
   clientInfo = clientInfo || {};
   if (!question) return { ok: false, error: 'Vui lòng nhập câu hỏi.' };
-
   try {
     var data = loadKnowledge_();
     var answer = askAi_(question, data);
@@ -59,15 +58,11 @@ function loadKnowledge_() {
   var cache = CacheService.getScriptCache();
   var cached = cache.get(KNOWLEDGE_CACHE_KEY);
   if (cached) return JSON.parse(cached);
-
   var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var faqRows = readSheetObjects_(spreadsheet, FAQ_SHEET_NAME);
-  var vanbanRows = readSheetObjects_(spreadsheet, VANBAN_SHEET_NAME);
   var data = {
-    faq: faqRows.filter(function (row) { return isActive_(row.STATUS || row['HIỆU LỰC'] || row['HIEU LUC']); }),
-    vanban: vanbanRows.filter(function (row) { return isActive_(row['HIỆU LỰC'] || row['HIEU LUC'] || row.STATUS); })
+    faq: readSheetObjects_(spreadsheet, FAQ_SHEET_NAME).filter(function (row) { return isActive_(row.STATUS || row['HIỆU LỰC'] || row['HIEU LUC']); }),
+    vanban: readSheetObjects_(spreadsheet, VANBAN_SHEET_NAME).filter(function (row) { return isActive_(row['HIỆU LỰC'] || row['HIEU LUC'] || row.STATUS); })
   };
-
   safeCachePut_(cache, KNOWLEDGE_CACHE_KEY, data);
   return data;
 }
@@ -77,19 +72,17 @@ function loadLinks_() {
   var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = spreadsheet.getSheetByName(LINKS_SHEET_NAME);
   if (!sheet) return fallback;
-
   var rows = readSheetObjects_(spreadsheet, LINKS_SHEET_NAME);
-  var links = rows
-    .filter(function (row) { return isActive_(pick_(row, ['STATUS', 'HIỆU LỰC', 'HIEU LUC'])); })
-    .map(function (row) {
-      return {
-        type: normalizeText_(pick_(row, ['TYPE', 'LOẠI', 'LOAI'])),
-        title: pick_(row, ['TITLE', 'TÊN', 'TEN', 'CHỦ ĐỀ', 'CHU DE']),
-        url: pick_(row, ['URL', 'LINK'])
-      };
-    })
-    .filter(function (item) { return item.title && /^https?:\/\//i.test(item.url); });
-
+  var links = rows.map(function (row) {
+    return {
+      type: normalizeText_(pick_(row, ['TYPE', 'LOẠI', 'LOAI'])),
+      title: pick_(row, ['TITLE', 'TÊN', 'TEN', 'CHỦ ĐỀ', 'CHU DE']),
+      url: pick_(row, ['URL', 'LINK']),
+      status: pick_(row, ['STATUS', 'HIỆU LỰC', 'HIEU LUC'])
+    };
+  }).filter(function (item) {
+    return isActive_(item.status) && item.title && /^https?:\/\//i.test(item.url);
+  });
   return {
     topics: links.filter(function (item) { return item.type === 'topic' || item.type === 'chu de' || item.type === 'notebook'; }).map(publicLink_),
     tools: links.filter(function (item) { return item.type === 'tool' || item.type === 'cong cu'; }).map(publicLink_)
@@ -104,65 +97,37 @@ function readSheetObjects_(spreadsheet, sheetName) {
   var richTextValues = range.getRichTextValues();
   if (values.length < 2) return [];
   var headers = values[0].map(function (header) { return String(header || '').trim(); });
-
-  return values
-    .map(function (row, rowIndex) { return { row: row, richTextRow: richTextValues[rowIndex] }; })
-    .slice(1)
-    .filter(function (entry) { return entry.row.some(function (cell) { return String(cell || '').trim(); }); })
-    .map(function (entry) {
-      var item = {};
-      headers.forEach(function (header, index) { if (header) item[header] = formatCellValue_(entry.row[index], entry.richTextRow[index]); });
-      return item;
+  return values.slice(1).map(function (row, offset) {
+    return { row: row, richTextRow: richTextValues[offset + 1] };
+  }).filter(function (entry) {
+    return entry.row.some(function (cell) { return String(cell || '').trim(); });
+  }).map(function (entry) {
+    var item = {};
+    headers.forEach(function (header, index) {
+      if (header) item[header] = formatCellValue_(entry.row[index], entry.richTextRow[index]);
     });
+    return item;
+  });
 }
 
 function askAi_(question, data) {
   var directAnswer = answerDirectlyFromFaq_(question, data.faq);
   if (directAnswer) return finalizeAnswer_(question, directAnswer);
-
   var apiKey = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
   if (!apiKey) throw new Error('Chưa cấu hình OPENAI_API_KEY trong Apps Script > Project Settings > Script properties.');
-
   var model = PropertiesService.getScriptProperties().getProperty('OPENAI_MODEL') || 'gpt-4o-mini';
   var relevantData = selectRelevantData_(question, data);
   var context = buildContext_(relevantData);
-  var prompt =
-    'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. ' +
-    'Ưu tiên dữ liệu FAQ trước. Nếu FAQ đã có câu trả lời phù hợp, trả lời chủ yếu theo FAQ và chỉ dùng VANBAN để bổ sung căn cứ khi cần. ' +
-    'Chỉ dùng VANBAN làm nguồn chính khi FAQ không có thông tin đủ phù hợp. ' +
-    'Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Nếu người dùng không hỏi về thay đổi/điều chỉnh thì không dùng mục đăng ký thay đổi làm câu trả lời chính. ' +
-    'Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay. Nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. ' +
-    'Nếu dữ liệu chưa đủ để kết luận, hãy nói rõ là chưa đủ thông tin trong bảng dữ liệu. ' +
-    'Trả lời bằng tiếng Việt có dấu, ngắn gọn, có căn cứ nguồn nếu có. ' +
-    'Nếu câu trả lời trong dữ liệu có link dạng [tên link](URL) hoặc URL thì phải giữ nguyên link đó trong câu trả lời. ' +
-    'Không được chỉ nói chung chung là "truy cập đường link" khi dữ liệu đã có URL cụ thể. ' +
-    'Riêng các thông báo về việc báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ được xem là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không được khái quát thành kết luận mọi báo cáo nộp trễ/quá hạn đều không sao. ' +
-    'Nếu người dùng hỏi chung về báo cáo quá hạn/nộp trễ, phải nêu rõ các kỳ khác vẫn có thể bị xem xét chế tài xử phạt theo quy định áp dụng nếu dữ liệu có căn cứ. ' +
-    'Cuối câu trả lời luôn có dòng "Nguồn: ...". ' +
-    'Nếu mục dữ liệu có "NGUỒN TRÍCH DẪN" thì dùng đúng nội dung đó làm nguồn, không dùng mã FAQ #... thay cho nguồn. ' +
-    'Nếu có nhiều nguồn phù hợp, ngăn cách bằng dấu chấm phẩy.\n\n' +
-    'DỮ LIỆU FAQ/VANBAN:\n' + context + '\n\n' +
-    'CÂU HỎI NGƯỜI DÙNG:\n' + question;
-
+  var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
   var response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
     method: 'post',
     contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + apiKey },
     muteHttpExceptions: true,
-    payload: JSON.stringify({
-      model: model,
-      temperature: 0.1,
-      max_tokens: 700,
-      messages: [
-        { role: 'system', content: 'Bạn trả lời như một trợ lý pháp lý nội bộ, không suy diễn ngoài dữ liệu.' },
-        { role: 'user', content: prompt }
-      ]
-    })
+    payload: JSON.stringify({ model: model, temperature: 0.1, max_tokens: 700, messages: [{ role: 'system', content: 'Bạn trả lời như một trợ lý pháp lý nội bộ, không suy diễn ngoài dữ liệu.' }, { role: 'user', content: prompt }] })
   });
-
   var status = response.getResponseCode();
-  var body = response.getContentText();
-  var json = JSON.parse(body);
+  var json = JSON.parse(response.getContentText());
   if (status < 200 || status >= 300) throw new Error((json.error && json.error.message) || ('OpenAI API lỗi HTTP ' + status));
   return finalizeAnswer_(question, json.choices[0].message.content.trim());
 }
@@ -176,13 +141,9 @@ function answerDirectlyFromFaq_(question, faqRows) {
   var normalizedTopQuestion = normalizeText_(pick_(top.row, ['QUESTION']));
   var exactish = normalizedTopQuestion && (normalizedTopQuestion.indexOf(normalizedQuestion) >= 0 || normalizedQuestion.indexOf(normalizedTopQuestion) >= 0);
   if (!exactish && second && top.score - second.score < 8) return '';
-
   var answer = pick_(top.row, ['ANSWER', 'CÂU TRẢ LỜI', 'CAU TRA LOI']);
   if (!answer) return '';
-  var source = pick_(top.row, ['SOURCE', 'NGUỒN', 'NGUON']);
-  var id = pick_(top.row, ['ID']);
-  if (!source && id) source = 'FAQ #' + id;
-  if (!source) source = 'FAQ';
+  var source = pick_(top.row, ['SOURCE', 'NGUỒN', 'NGUON']) || (pick_(top.row, ['ID']) ? 'FAQ #' + pick_(top.row, ['ID']) : 'FAQ');
   if (/nguồn\s*:/i.test(answer)) return answer;
   return answer + '\n\nNguồn: ' + source;
 }
@@ -192,10 +153,7 @@ function selectRelevantData_(question, data) {
   var vanbanRanked = rankRows_(question, data.vanban, ['NỘI DUNG', 'NOI DUNG', 'TÊN VĂN BẢN', 'TEN VAN BAN', 'SỐ VĂN BẢN', 'SO VAN BAN']);
   var faqMatches = faqRanked.filter(function (item) { return item.score > 0; });
   var vanbanMatches = vanbanRanked.filter(function (item) { return item.score > 0; });
-  return {
-    faq: (faqMatches.length ? faqMatches : faqRanked).slice(0, 5).map(function (item) { return item.row; }),
-    vanban: (vanbanMatches.length ? vanbanMatches : vanbanRanked).slice(0, 5).map(function (item) { return item.row; })
-  };
+  return { faq: (faqMatches.length ? faqMatches : faqRanked).slice(0, 5).map(function (item) { return item.row; }), vanban: (vanbanMatches.length ? vanbanMatches : vanbanRanked).slice(0, 5).map(function (item) { return item.row; }) };
 }
 
 function rankRows_(question, rows, keys) {
@@ -205,7 +163,6 @@ function rankRows_(question, rows, keys) {
   var questionHasChangeIntent = /\b(thay doi|dieu chinh)\b/.test(normalizedQuestion);
   var questionHasReportIntent = /\bbao cao\b/.test(normalizedQuestion);
   var questionHasRegistrationIntent = /\b(dang ky|ho so dang ky|xac nhan dang ky)\b/.test(normalizedQuestion);
-
   return rows.map(function (row, index) {
     var haystack = normalizeText_(keys.map(function (key) { return row[key] || ''; }).join(' '));
     var score = normalizedQuestion && haystack.indexOf(normalizedQuestion) >= 0 ? 80 : 0;
@@ -224,20 +181,13 @@ function rankRows_(question, rows, keys) {
 function buildImportantPhrases_(normalizedQuestion) {
   var words = normalizedQuestion.split(' ').filter(function (word) { return word.length >= 2; });
   var phrases = [];
-  for (var size = Math.min(5, words.length); size >= 2; size -= 1) {
-    for (var index = 0; index <= words.length - size; index += 1) phrases.push(words.slice(index, index + size).join(' '));
-  }
-  ['dang ky khoan vay', 'thoi han dang ky', 'dang ky vay nuoc ngoai', 'ho so dang ky', 'bao cao vay', 'nop bao cao', 'cham nop bao cao', 'bao cao qua han', 'bao cao tre han', 'nop bao cao tre han'].forEach(function (phrase) {
-    if (normalizedQuestion.indexOf(phrase) >= 0 && phrases.indexOf(phrase) === -1) phrases.push(phrase);
-  });
+  for (var size = Math.min(5, words.length); size >= 2; size -= 1) for (var index = 0; index <= words.length - size; index += 1) phrases.push(words.slice(index, index + size).join(' '));
+  ['dang ky khoan vay', 'thoi han dang ky', 'dang ky vay nuoc ngoai', 'ho so dang ky', 'bao cao vay', 'nop bao cao', 'cham nop bao cao', 'bao cao qua han', 'bao cao tre han', 'nop bao cao tre han'].forEach(function (phrase) { if (normalizedQuestion.indexOf(phrase) >= 0 && phrases.indexOf(phrase) === -1) phrases.push(phrase); });
   return phrases;
 }
 
 function buildContext_(data) {
-  var faqText = data.faq.slice(0, 5).map(function (row, index) {
-    return ['MÃ THAM CHIẾU: FAQ #' + (index + 1), 'GROUP: ' + pick_(row, ['GROUP']), 'QUESTION: ' + pick_(row, ['QUESTION']), 'ANSWER: ' + compactText_(pick_(row, ['ANSWER']), 1600), 'NGUỒN TRÍCH DẪN: ' + pick_(row, ['SOURCE', 'NGUỒN', 'NGUON']), 'KEYWORDS: ' + pick_(row, ['KEYWORDS'])].join('\n');
-  }).join('\n---\n');
-
+  var faqText = data.faq.slice(0, 5).map(function (row, index) { return ['MÃ THAM CHIẾU: FAQ #' + (index + 1), 'GROUP: ' + pick_(row, ['GROUP']), 'QUESTION: ' + pick_(row, ['QUESTION']), 'ANSWER: ' + compactText_(pick_(row, ['ANSWER']), 1600), 'NGUỒN TRÍCH DẪN: ' + pick_(row, ['SOURCE', 'NGUỒN', 'NGUON']), 'KEYWORDS: ' + pick_(row, ['KEYWORDS'])].join('\n'); }).join('\n---\n');
   var vanbanText = data.vanban.slice(0, 5).map(function (row, index) {
     var soVanBan = pick_(row, ['SỐ VĂN BẢN', 'SO VAN BAN']);
     var tenVanBan = pick_(row, ['TÊN VĂN BẢN', 'TEN VAN BAN']);
@@ -248,121 +198,28 @@ function buildContext_(data) {
   return 'FAQ:\n' + faqText + '\n\nVANBAN:\n' + vanbanText;
 }
 
-function compactText_(value, maxLength) {
-  var text = String(value || '').trim();
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength).trim() + '...';
-}
-
-function finalizeAnswer_(question, answer) {
-  return addLateReportScopeWarning_(question, answer);
-}
-
+function compactText_(value, maxLength) { var text = String(value || '').trim(); return text.length <= maxLength ? text : text.slice(0, maxLength).trim() + '...'; }
+function finalizeAnswer_(question, answer) { return addLateReportScopeWarning_(question, answer); }
 function addLateReportScopeWarning_(question, answer) {
-  var normalizedQuestion = normalizeText_(question);
-  var normalizedAnswer = normalizeText_(answer);
-  var asksLateReport = normalizedQuestion.indexOf('bao cao') >= 0 && (normalizedQuestion.indexOf('qua han') >= 0 || normalizedQuestion.indexOf('nop tre') >= 0 || normalizedQuestion.indexOf('cham nop') >= 0 || normalizedQuestion.indexOf('tre han') >= 0);
-  var answerLooksLikeOneOffException = (normalizedAnswer.indexOf('chuyen doi du lieu') >= 0 || normalizedAnswer.indexOf('trang dien tu') >= 0 || normalizedAnswer.indexOf('thong bao tai trang chu') >= 0) && (normalizedAnswer.indexOf('khong sao') >= 0 || normalizedAnswer.indexOf('yen tam') >= 0 || normalizedAnswer.indexOf('khong anh huong') >= 0);
-  var questionAlreadyScoped = normalizedQuestion.indexOf('thang 4 2026') >= 0 || normalizedQuestion.indexOf('04 2026') >= 0 || normalizedQuestion.indexOf('4 2026') >= 0;
-  if (!asksLateReport || !answerLooksLikeOneOffException || questionAlreadyScoped) return answer;
+  var q = normalizeText_(question), a = normalizeText_(answer);
+  var asksLateReport = q.indexOf('bao cao') >= 0 && (q.indexOf('qua han') >= 0 || q.indexOf('nop tre') >= 0 || q.indexOf('cham nop') >= 0 || q.indexOf('tre han') >= 0);
+  var oneOff = (a.indexOf('chuyen doi du lieu') >= 0 || a.indexOf('trang dien tu') >= 0 || a.indexOf('thong bao tai trang chu') >= 0) && (a.indexOf('khong sao') >= 0 || a.indexOf('yen tam') >= 0 || a.indexOf('khong anh huong') >= 0);
+  var scoped = q.indexOf('thang 4 2026') >= 0 || q.indexOf('04 2026') >= 0 || q.indexOf('4 2026') >= 0;
+  if (!asksLateReport || !oneOff || scoped) return answer;
   return answer + '\n\nLưu ý phạm vi: nội dung trên chỉ nên hiểu cho trường hợp báo cáo kỳ tháng 4/2026 bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử theo thông báo nguồn. Với các kỳ báo cáo khác, việc nộp trễ/quá hạn vẫn có thể bị xem xét chế tài xử phạt theo quy định áp dụng.';
 }
 
-function appendLog_(question, answer, meta) {
-  try {
-    meta = meta || {};
-    var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-    var sheet = spreadsheet.getSheetByName(LOG_SHEET_NAME) || spreadsheet.insertSheet(LOG_SHEET_NAME);
-    ensureLogHeader_(sheet);
-    sheet.appendRow([new Date(), meta.asker || 'Ẩn danh', question, answer, meta.source || '', meta.userAgent || '']);
-  } catch (err) {}
-}
-
-function ensureLogHeader_(sheet) {
-  var headers = ['NGÀY GIỜ', 'NGƯỜI HỎI', 'CÂU HỎI', 'CÂU TRẢ LỜI', 'NGUỒN', 'TRÌNH DUYỆT'];
-  if (sheet.getLastRow() === 0) { sheet.appendRow(headers); return; }
-  var currentHeaders = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
-  var needsHeader = headers.some(function (header, index) { return currentHeaders[index] !== header; });
-  if (needsHeader) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-}
-
-function ensureLinksHeader_(sheet) {
-  var headers = ['TYPE', 'TITLE', 'URL', 'STATUS'];
-  if (sheet.getLastRow() === 0) { sheet.appendRow(headers); return; }
-  var currentHeaders = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
-  var needsHeader = headers.some(function (header, index) { return currentHeaders[index] !== header; });
-  if (needsHeader) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-}\n
-function setupAuthorization() {
-  var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var logSheet = spreadsheet.getSheetByName(LOG_SHEET_NAME) || spreadsheet.insertSheet(LOG_SHEET_NAME);
-  var linksSheet = spreadsheet.getSheetByName(LINKS_SHEET_NAME) || spreadsheet.insertSheet(LINKS_SHEET_NAME);
-  ensureLogHeader_(logSheet);
-  ensureLinksHeader_(linksSheet);
-  loadKnowledge_();
-  loadLinks_();
-  return 'Đã cấp quyền và kết nối được Google Sheet.';
-}
-
-function renderChatUi_() {
-  var html = '<!doctype html><html lang="vi"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hỏi đáp quy định NHNN</title><style>body{font-family:Arial,sans-serif;margin:24px;max-width:760px;color:#17202a}textarea{width:100%;box-sizing:border-box;padding:10px;line-height:1.45}button{margin-top:12px;padding:10px 14px;background:#0f766e;color:white;border:0;border-radius:8px;font-weight:700}.disclaimer{margin:16px 0;padding:12px;border:1px solid #f0caca;border-radius:8px;color:#b30000;background:#fffafa;font-size:13px;font-style:italic;line-height:1.5}pre{white-space:pre-wrap;line-height:1.5}</style></head><body><h1>Hỏi đáp quy định NHNN</h1><p>Bạn hãy nhập câu hỏi, tôi sẽ cố gắng trả lời dựa trên dữ liệu hiện có. Nếu cần tra cứu chuyên sâu hơn theo từng nhóm quy định, bạn có thể mở các link tra cứu nhanh theo chủ đề ở trang GitHub Pages.</p><p class="disclaimer">Dự án miễn phí có sử dụng AI, chỉ mang tính chất tham khảo. Vui lòng đối chiếu với quy định hiện hành trước khi áp dụng.</p><form id="form"><textarea id="question" rows="4" placeholder="Nhập câu hỏi"></textarea><button type="submit">Gửi câu hỏi</button></form><pre id="answer"></pre><script>document.getElementById("form").addEventListener("submit",function(e){e.preventDefault();var q=document.getElementById("question").value.trim();var a=document.getElementById("answer");if(!q)return;a.textContent="Đang xử lý...";google.script.run.withSuccessHandler(function(p){a.textContent=p&&p.ok?p.answer:(p&&p.error)||"Có lỗi."}).withFailureHandler(function(err){a.textContent=err.message||String(err)}).askFromUi(q,{asker:"Ẩn danh",userAgent:navigator.userAgent})});</script></body></html>';
-  return HtmlService.createHtmlOutput(html).setTitle('Hỏi đáp quy định NHNN').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-function output_(callback, payload) {
-  if (callback) {
-    var safeCallback = callback.replace(/[^\w.$]/g, '');
-    return ContentService.createTextOutput(safeCallback + '(' + JSON.stringify(payload) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function isActive_(value) {
-  var text = String(value || '').trim().toLowerCase();
-  return !text || text === 'hiệu lực' || text === 'hieu luc' || text === 'active';
-}
-
-function pick_(row, keys) {
-  for (var i = 0; i < keys.length; i += 1) if (row[keys[i]]) return row[keys[i]];
-  return '';
-}
-
-function publicLink_(item) {
-  return { title: item.title, url: item.url };
-}
-
-function safeCachePut_(cache, key, value) {
-  try { cache.put(key, JSON.stringify(value), CACHE_TTL_SECONDS); } catch (err) {}
-}
-
-function normalizeText_(value) {
-  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function formatCellValue_(displayValue, richTextValue) {
-  var text = String(displayValue || '').trim();
-  if (!richTextValue) return text;
-  var cellUrl = richTextValue.getLinkUrl && richTextValue.getLinkUrl();
-  if (cellUrl && text && text.indexOf(cellUrl) === -1) return '[' + text + '](' + cellUrl + ')';
-  var runs = richTextValue.getRuns ? richTextValue.getRuns() : [];
-  if (!runs || !runs.length) return text;
-  var linkedParts = [];
-  runs.forEach(function (run) {
-    var runText = String(run.getText() || '').trim();
-    var url = run.getLinkUrl && run.getLinkUrl();
-    if (runText && url && text.indexOf(url) === -1) linkedParts.push('[' + runText + '](' + url + ')');
-  });
-  if (!linkedParts.length) return text;
-  var result = text;
-  linkedParts.forEach(function (linkedPart) { if (result.indexOf(linkedPart) === -1) result += ' ' + linkedPart; });
-  return result.trim();
-}
-
-function formatPart_(label, value) {
-  value = String(value || '').trim();
-  return value ? label + ' ' + value : '';
-}
-
-function errorMessage_(err) {
-  return err && err.message ? err.message : String(err);
-}
+function appendLog_(question, answer, meta) { try { meta = meta || {}; var ss = SpreadsheetApp.openById(SPREADSHEET_ID); var sheet = ss.getSheetByName(LOG_SHEET_NAME) || ss.insertSheet(LOG_SHEET_NAME); ensureLogHeader_(sheet); sheet.appendRow([new Date(), meta.asker || 'Ẩn danh', question, answer, meta.source || '', meta.userAgent || '']); } catch (err) {} }
+function ensureLogHeader_(sheet) { var headers = ['NGÀY GIỜ', 'NGƯỜI HỎI', 'CÂU HỎI', 'CÂU TRẢ LỜI', 'NGUỒN', 'TRÌNH DUYỆT']; if (sheet.getLastRow() === 0) { sheet.appendRow(headers); return; } var current = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0]; if (headers.some(function (h, i) { return current[i] !== h; })) sheet.getRange(1, 1, 1, headers.length).setValues([headers]); }
+function ensureLinksHeader_(sheet) { var headers = ['TYPE', 'TITLE', 'URL', 'STATUS']; if (sheet.getLastRow() === 0) { sheet.appendRow(headers); return; } var current = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0]; if (headers.some(function (h, i) { return current[i] !== h; })) sheet.getRange(1, 1, 1, headers.length).setValues([headers]); }
+function setupAuthorization() { var ss = SpreadsheetApp.openById(SPREADSHEET_ID); ensureLogHeader_(ss.getSheetByName(LOG_SHEET_NAME) || ss.insertSheet(LOG_SHEET_NAME)); ensureLinksHeader_(ss.getSheetByName(LINKS_SHEET_NAME) || ss.insertSheet(LINKS_SHEET_NAME)); loadKnowledge_(); loadLinks_(); return 'Đã cấp quyền và kết nối được Google Sheet.'; }
+function renderChatUi_() { var html = '<!doctype html><html lang="vi"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hỏi đáp quy định NHNN</title><style>body{font-family:Arial,sans-serif;margin:24px;max-width:760px;color:#17202a}textarea{width:100%;box-sizing:border-box;padding:10px;line-height:1.45}button{margin-top:12px;padding:10px 14px;background:#0f766e;color:white;border:0;border-radius:8px;font-weight:700}.disclaimer{margin:16px 0;padding:12px;border:1px solid #f0caca;border-radius:8px;color:#b30000;background:#fffafa;font-size:13px;font-style:italic;line-height:1.5}pre{white-space:pre-wrap;line-height:1.5}</style></head><body><h1>Hỏi đáp quy định NHNN</h1><p>Bạn hãy nhập câu hỏi, tôi sẽ cố gắng trả lời dựa trên dữ liệu hiện có. Nếu cần tra cứu chuyên sâu hơn theo từng nhóm quy định, bạn có thể mở các link tra cứu nhanh theo chủ đề ở trang GitHub Pages.</p><p class="disclaimer">Dự án miễn phí có sử dụng AI, chỉ mang tính chất tham khảo. Vui lòng đối chiếu với quy định hiện hành trước khi áp dụng.</p><form id="form"><textarea id="question" rows="4" placeholder="Nhập câu hỏi"></textarea><button type="submit">Gửi câu hỏi</button></form><pre id="answer"></pre><script>document.getElementById("form").addEventListener("submit",function(e){e.preventDefault();var q=document.getElementById("question").value.trim();var a=document.getElementById("answer");if(!q)return;a.textContent="Đang xử lý...";google.script.run.withSuccessHandler(function(p){a.textContent=p&&p.ok?p.answer:(p&&p.error)||"Có lỗi."}).withFailureHandler(function(err){a.textContent=err.message||String(err)}).askFromUi(q,{asker:"Ẩn danh",userAgent:navigator.userAgent})});</script></body></html>'; return HtmlService.createHtmlOutput(html).setTitle('Hỏi đáp quy định NHNN').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); }
+function output_(callback, payload) { if (callback) { var safeCallback = callback.replace(/[^\w.$]/g, ''); return ContentService.createTextOutput(safeCallback + '(' + JSON.stringify(payload) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT); } return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON); }
+function isActive_(value) { var text = String(value || '').trim().toLowerCase(); return !text || text === 'hiệu lực' || text === 'hieu luc' || text === 'active'; }
+function pick_(row, keys) { for (var i = 0; i < keys.length; i += 1) if (row[keys[i]]) return row[keys[i]]; return ''; }
+function publicLink_(item) { return { title: item.title, url: item.url }; }
+function safeCachePut_(cache, key, value) { try { cache.put(key, JSON.stringify(value), CACHE_TTL_SECONDS); } catch (err) {} }
+function normalizeText_(value) { return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/[^a-z0-9]+/g, ' ').trim(); }
+function formatCellValue_(displayValue, richTextValue) { var text = String(displayValue || '').trim(); if (!richTextValue) return text; var cellUrl = richTextValue.getLinkUrl && richTextValue.getLinkUrl(); if (cellUrl && text && text.indexOf(cellUrl) === -1) return '[' + text + '](' + cellUrl + ')'; var runs = richTextValue.getRuns ? richTextValue.getRuns() : []; if (!runs || !runs.length) return text; var linkedParts = []; runs.forEach(function (run) { var runText = String(run.getText() || '').trim(); var url = run.getLinkUrl && run.getLinkUrl(); if (runText && url && text.indexOf(url) === -1) linkedParts.push('[' + runText + '](' + url + ')'); }); if (!linkedParts.length) return text; var result = text; linkedParts.forEach(function (linkedPart) { if (result.indexOf(linkedPart) === -1) result += ' ' + linkedPart; }); return result.trim(); }
+function formatPart_(label, value) { value = String(value || '').trim(); return value ? label + ' ' + value : ''; }
+function errorMessage_(err) { return err && err.message ? err.message : String(err); }
