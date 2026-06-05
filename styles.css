@@ -526,7 +526,8 @@ button:disabled {
   }
 }
 .disclaimer {
-  margin-top: 16px;
+  grid-column: 1 / -1;
+  margin-top: 12px;
   padding: 10px 16px;
 
   background: #fff8f8;
@@ -534,8 +535,10 @@ button:disabled {
 
   font-style: italic;
   font-size: 12px;
+  line-height: 1.5;
   text-align: center;
 
-  border-top: 1px solid #ffcccc;
+  border: 1px solid #ffcccc;
+  border-radius: 10px;
   box-sizing: border-box;
 }
