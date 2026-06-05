@@ -218,15 +218,12 @@ function rankRows_(question, rows, keys) {
     var score = normalizedQuestion && haystack.indexOf(normalizedQuestion) >= 0 ? 80 : 0;
     var rowHasReportIntent = /\bbao cao\b/.test(haystack);
     var rowHasRegistrationIntent = /\b(dang ky|ho so dang ky|xac nhan dang ky)\b/.test(haystack);
-
     tokens.forEach(function (token) { if (haystack.indexOf(token) >= 0) score += token.length > 3 ? 3 : 1; });
     importantPhrases.forEach(function (phrase) { if (haystack.indexOf(phrase) >= 0) score += phrase.split(' ').length * 12; });
-
     if (!questionHasChangeIntent && /\b(thay doi|dieu chinh)\b/.test(haystack)) score -= 35;
     if (questionHasReportIntent && !rowHasReportIntent) score -= 90;
     if (questionHasReportIntent && rowHasRegistrationIntent && !rowHasReportIntent) score -= 60;
     if (!questionHasRegistrationIntent && rowHasRegistrationIntent && !rowHasReportIntent) score -= 15;
-
     return { row: row, score: score, index: index };
   }).sort(function (a, b) { if (b.score !== a.score) return b.score - a.score; return a.index - b.index; });
 }
@@ -255,7 +252,6 @@ function buildContext_(data) {
     var citation = [diemKhoanDieu, soVanBan, tenVanBan].filter(Boolean).join(' - ');
     return ['MÃ THAM CHIẾU: VANBAN #' + (index + 1), 'SO VAN BAN: ' + soVanBan, 'TEN VAN BAN: ' + tenVanBan, 'DIEM/KHOAN/DIEU: ' + diemKhoanDieu, 'NGUỒN TRÍCH DẪN: ' + citation, 'NOI DUNG: ' + compactText_(pick_(row, ['NỘI DUNG', 'NOI DUNG']), 1800)].join('\n');
   }).join('\n---\n');
-
   return 'FAQ:\n' + faqText + '\n\nVANBAN:\n' + vanbanText;
 }
 
@@ -317,7 +313,7 @@ function setupAuthorization() {
 }
 
 function renderChatUi_() {
-  var html = '<!doctype html><html lang="vi"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hỏi đáp quy định NHNN</title></head><body style="font-family:Arial,sans-serif;margin:24px;max-width:760px"><h1>Hỏi đáp quy định NHNN</h1><p>Giao diện chính đang public tại GitHub Pages. Trang Apps Script này vẫn có thể test nhanh backend.</p><form id="form"><textarea id="question" rows="4" style="width:100%;box-sizing:border-box" placeholder="Nhập câu hỏi"></textarea><button type="submit" style="margin-top:12px">Gửi câu hỏi</button></form><pre id="answer" style="white-space:pre-wrap;line-height:1.5"></pre><script>document.getElementById("form").addEventListener("submit",function(e){e.preventDefault();var q=document.getElementById("question").value.trim();var a=document.getElementById("answer");if(!q)return;a.textContent="Đang xử lý...";google.script.run.withSuccessHandler(function(p){a.textContent=p&&p.ok?p.answer:(p&&p.error)||"Có lỗi."}).withFailureHandler(function(err){a.textContent=err.message||String(err)}).askFromUi(q,{asker:"Ẩn danh",userAgent:navigator.userAgent})});</script></body></html>';
+  var html = '<!doctype html><html lang="vi"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Hỏi đáp quy định NHNN</title><style>body{font-family:Arial,sans-serif;margin:24px;max-width:760px;color:#17202a}textarea{width:100%;box-sizing:border-box;padding:10px;line-height:1.45}button{margin-top:12px;padding:10px 14px;background:#0f766e;color:white;border:0;border-radius:8px;font-weight:700}.disclaimer{margin:16px 0;padding:12px;border:1px solid #f0caca;border-radius:8px;color:#b30000;background:#fffafa;font-size:13px;font-style:italic;line-height:1.5}pre{white-space:pre-wrap;line-height:1.5}</style></head><body><h1>Hỏi đáp quy định NHNN</h1><p>Bạn hãy nhập câu hỏi, tôi sẽ cố gắng trả lời dựa trên dữ liệu hiện có. Nếu cần tra cứu chuyên sâu hơn theo từng nhóm quy định, bạn có thể mở các link tra cứu nhanh theo chủ đề ở trang GitHub Pages.</p><p class="disclaimer">Dự án miễn phí có sử dụng AI, chỉ mang tính chất tham khảo. Vui lòng đối chiếu với quy định hiện hành trước khi áp dụng.</p><form id="form"><textarea id="question" rows="4" placeholder="Nhập câu hỏi"></textarea><button type="submit">Gửi câu hỏi</button></form><pre id="answer"></pre><script>document.getElementById("form").addEventListener("submit",function(e){e.preventDefault();var q=document.getElementById("question").value.trim();var a=document.getElementById("answer");if(!q)return;a.textContent="Đang xử lý...";google.script.run.withSuccessHandler(function(p){a.textContent=p&&p.ok?p.answer:(p&&p.error)||"Có lỗi."}).withFailureHandler(function(err){a.textContent=err.message||String(err)}).askFromUi(q,{asker:"Ẩn danh",userAgent:navigator.userAgent})});</script></body></html>';
   return HtmlService.createHtmlOutput(html).setTitle('Hỏi đáp quy định NHNN').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
