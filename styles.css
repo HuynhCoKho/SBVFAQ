@@ -526,22 +526,16 @@ button:disabled {
   }
 }
 .disclaimer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
+  margin-top: 16px;
+  padding: 10px 16px;
 
-    background: #fff8f8;
-    color: #b30000;
+  background: #fff8f8;
+  color: #b30000;
 
-    font-style: italic;
-    font-size: 12px;
+  font-style: italic;
+  font-size: 12px;
+  text-align: center;
 
-    text-align: center;
-    padding: 10px;
-
-    border-top: 1px solid #ffcccc;
-
-    z-index: 9999;
-    box-sizing: border-box;
+  border-top: 1px solid #ffcccc;
+  box-sizing: border-box;
 }
