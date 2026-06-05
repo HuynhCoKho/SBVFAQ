@@ -525,3 +525,23 @@ button:disabled {
     width: 100%;
   }
 }
+.disclaimer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+
+    background: #fff8f8;
+    color: #b30000;
+
+    font-style: italic;
+    font-size: 12px;
+
+    text-align: center;
+    padding: 10px;
+
+    border-top: 1px solid #ffcccc;
+
+    z-index: 9999;
+    box-sizing: border-box;
+}
