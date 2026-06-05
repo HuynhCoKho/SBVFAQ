@@ -74,10 +74,6 @@ function loadKnowledge_() {
 
 function loadLinks_() {
   var fallback = { topics: [], tools: [] };
-  var cache = CacheService.getScriptCache();
-  var cached = cache.get('links-v1');
-  if (cached) return JSON.parse(cached);
-
   var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = spreadsheet.getSheetByName(LINKS_SHEET_NAME);
   if (!sheet) return fallback;
@@ -94,13 +90,10 @@ function loadLinks_() {
     })
     .filter(function (item) { return item.title && /^https?:\/\//i.test(item.url); });
 
-  var result = {
+  return {
     topics: links.filter(function (item) { return item.type === 'topic' || item.type === 'chu de' || item.type === 'notebook'; }).map(publicLink_),
     tools: links.filter(function (item) { return item.type === 'tool' || item.type === 'cong cu'; }).map(publicLink_)
   };
-
-  safeCachePut_(cache, 'links-v1', result);
-  return result;
 }
 
 function readSheetObjects_(spreadsheet, sheetName) {
@@ -299,8 +292,7 @@ function ensureLinksHeader_(sheet) {
   var currentHeaders = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
   var needsHeader = headers.some(function (header, index) { return currentHeaders[index] !== header; });
   if (needsHeader) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-}
-
+}\n
 function setupAuthorization() {
   var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
   var logSheet = spreadsheet.getSheetByName(LOG_SHEET_NAME) || spreadsheet.insertSheet(LOG_SHEET_NAME);
