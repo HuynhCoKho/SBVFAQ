@@ -525,20 +525,14 @@ button:disabled {
     width: 100%;
   }
 }
-.disclaimer {
-  grid-column: 1 / -1;
-  margin-top: 12px;
-  padding: 10px 16px;
+.author-disclaimer {
+  margin-top: 8px;
+  padding-top: 8px;
 
-  background: #fff8f8;
+  border-top: 1px solid #e5e7eb;
+
   color: #b30000;
-
-  font-style: italic;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
-  text-align: center;
-
-  border: 1px solid #ffcccc;
-  border-radius: 10px;
-  box-sizing: border-box;
+  font-style: italic;
 }
