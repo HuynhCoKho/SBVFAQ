@@ -4,7 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v8';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v9';
 var DIRECT_FAQ_MIN_SCORE = 36;
 var DIRECT_FAQ_STRONG_SCORE = 48;
 var MIN_AI_CONTEXT_SCORE = 28;
@@ -147,8 +147,7 @@ function answerDirectlyFromFaq_(question, faqRows) {
   var exactish = normalizedTopQuestion && (normalizedTopQuestion.indexOf(normalizedQuestion) >= 0 || normalizedQuestion.indexOf(normalizedTopQuestion) >= 0);
   var strongPhraseMatch = hasImportantPhraseMatch_(normalizedQuestion, topHaystack);
   var clearlyAhead = !second || top.score - second.score >= 8;
-  if (!exactish && !strongPhraseMatch && !clearlyAhead) return '';
-  if (!exactish && !clearlyAhead && top.score < DIRECT_FAQ_STRONG_SCORE) return '';
+  if (!exactish && !strongPhraseMatch && !clearlyAhead && top.score < DIRECT_FAQ_STRONG_SCORE) return '';
   var answer = pick_(top.row, ['ANSWER', 'CÂU TRẢ LỜI', 'CAU TRA LOI']);
   if (!answer) return '';
   var source = pick_(top.row, ['SOURCE', 'NGUỒN', 'NGUON']) || (pick_(top.row, ['ID']) ? 'FAQ #' + pick_(top.row, ['ID']) : 'FAQ');
@@ -164,6 +163,12 @@ function hasImportantPhraseMatch_(normalizedQuestion, haystack) {
 function selectRelevantData_(question, data) {
   var faqRanked = rankRows_(question, data.faq, ['QUESTION', 'ANSWER', 'KEYWORDS', 'GROUP', 'SOURCE'])
     .filter(function (item) { return item.score >= MIN_AI_CONTEXT_SCORE; });
+  if (faqRanked.length) {
+    return {
+      faq: faqRanked.slice(0, 5).map(function (item) { return item.row; }),
+      vanban: []
+    };
+  }
   var vanbanRanked = rankRows_(question, data.vanban, ['NỘI DUNG', 'NOI DUNG', 'TÊN VĂN BẢN', 'TEN VAN BAN', 'SỐ VĂN BẢN', 'SO VAN BAN'])
     .filter(function (item) { return item.score >= MIN_AI_CONTEXT_SCORE; });
   return {
@@ -265,3 +270,4 @@ function normalizeText_(value) { return String(value || '').toLowerCase().normal
 function formatCellValue_(displayValue, richTextValue) { var text = String(displayValue || '').trim(); if (!richTextValue) return text; var cellUrl = richTextValue.getLinkUrl && richTextValue.getLinkUrl(); if (cellUrl && text && text.indexOf(cellUrl) === -1) return '[' + text + '](' + cellUrl + ')'; var runs = richTextValue.getRuns ? richTextValue.getRuns() : []; if (!runs || !runs.length) return text; var linkedParts = []; runs.forEach(function (run) { var runText = String(run.getText() || '').trim(); var url = run.getLinkUrl && run.getLinkUrl(); if (runText && url && text.indexOf(url) === -1) linkedParts.push('[' + runText + '](' + url + ')'); }); if (!linkedParts.length) return text; var result = text; linkedParts.forEach(function (linkedPart) { if (result.indexOf(linkedPart) === -1) result += ' ' + linkedPart; }); return result.trim(); }
 function formatPart_(label, value) { value = String(value || '').trim(); return value ? label + ' ' + value : ''; }
 function errorMessage_(err) { return err && err.message ? err.message : String(err); }
+
