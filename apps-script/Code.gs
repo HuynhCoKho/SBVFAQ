@@ -6,6 +6,7 @@ var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
 var KNOWLEDGE_CACHE_KEY = 'knowledge-v8';
 var DIRECT_FAQ_MIN_SCORE = 36;
+var DIRECT_FAQ_STRONG_SCORE = 48;
 var MIN_AI_CONTEXT_SCORE = 28;
 var NO_DATA_ANSWER = 'Mình chưa tìm thấy dữ liệu đủ tin cậy trong FAQ/VANBAN hiện có để trả lời câu hỏi này. Bạn có thể tra cứu văn bản quy định theo chủ đề tại panel bên trái.';
 
@@ -142,13 +143,22 @@ function answerDirectlyFromFaq_(question, faqRows) {
   var second = ranked[1];
   var normalizedQuestion = normalizeText_(question);
   var normalizedTopQuestion = normalizeText_(pick_(top.row, ['QUESTION']));
+  var topHaystack = normalizeText_([pick_(top.row, ['QUESTION']), pick_(top.row, ['KEYWORDS']), pick_(top.row, ['GROUP']), pick_(top.row, ['SOURCE'])].join(' '));
   var exactish = normalizedTopQuestion && (normalizedTopQuestion.indexOf(normalizedQuestion) >= 0 || normalizedQuestion.indexOf(normalizedTopQuestion) >= 0);
-  if (!exactish && second && top.score - second.score < 8) return '';
+  var strongPhraseMatch = hasImportantPhraseMatch_(normalizedQuestion, topHaystack);
+  var clearlyAhead = !second || top.score - second.score >= 8;
+  if (!exactish && !strongPhraseMatch && !clearlyAhead) return '';
+  if (!exactish && !clearlyAhead && top.score < DIRECT_FAQ_STRONG_SCORE) return '';
   var answer = pick_(top.row, ['ANSWER', 'CÂU TRẢ LỜI', 'CAU TRA LOI']);
   if (!answer) return '';
   var source = pick_(top.row, ['SOURCE', 'NGUỒN', 'NGUON']) || (pick_(top.row, ['ID']) ? 'FAQ #' + pick_(top.row, ['ID']) : 'FAQ');
   if (/nguồn\s*:/i.test(answer)) return answer;
   return answer + '\n\nNguồn: ' + source;
+}
+
+function hasImportantPhraseMatch_(normalizedQuestion, haystack) {
+  var phrases = buildImportantPhrases_(normalizedQuestion);
+  return !!phrases.length && phrases.some(function (phrase) { return haystack.indexOf(phrase) >= 0; });
 }
 
 function selectRelevantData_(question, data) {
