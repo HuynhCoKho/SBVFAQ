@@ -7,7 +7,7 @@ var CACHE_TTL_SECONDS = 300;
 var KNOWLEDGE_CACHE_KEY = 'knowledge-v8';
 var DIRECT_FAQ_MIN_SCORE = 36;
 var MIN_AI_CONTEXT_SCORE = 28;
-var NO_DATA_ANSWER = 'Mình chưa tìm thấy dữ liệu đủ tin cậy trong FAQ/VANBAN hiện có để trả lời câu hỏi này. Bạn có thể tra cứu văn bản quy định theo chủ đề tại panel bên trái hoặc bổ sung thêm dữ liệu phù hợp vào sheet FAQ/VANBAN.';
+var NO_DATA_ANSWER = 'Mình chưa tìm thấy dữ liệu đủ tin cậy trong FAQ/VANBAN hiện có để trả lời câu hỏi này. Bạn có thể tra cứu văn bản quy định theo chủ đề tại panel bên trái.';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
