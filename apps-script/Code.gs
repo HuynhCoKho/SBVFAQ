@@ -6,6 +6,8 @@ var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
 var KNOWLEDGE_CACHE_KEY = 'knowledge-v8';
 var DIRECT_FAQ_MIN_SCORE = 36;
+var MIN_AI_CONTEXT_SCORE = 28;
+var NO_DATA_ANSWER = 'Mình chưa tìm thấy dữ liệu đủ tin cậy trong FAQ/VANBAN hiện có để trả lời câu hỏi này. Bạn có thể tra cứu văn bản quy định theo chủ đề tại panel bên trái hoặc bổ sung thêm dữ liệu phù hợp vào sheet FAQ/VANBAN.';
 
 function doGet(e) {
   var params = (e && e.parameter) || {};
@@ -117,6 +119,7 @@ function askAi_(question, data) {
   if (!apiKey) throw new Error('Chưa cấu hình OPENAI_API_KEY trong Apps Script > Project Settings > Script properties.');
   var model = PropertiesService.getScriptProperties().getProperty('OPENAI_MODEL') || 'gpt-4o-mini';
   var relevantData = selectRelevantData_(question, data);
+  if (!hasRelevantContext_(relevantData)) return NO_DATA_ANSWER;
   var context = buildContext_(relevantData);
   var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
   var response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
@@ -149,11 +152,18 @@ function answerDirectlyFromFaq_(question, faqRows) {
 }
 
 function selectRelevantData_(question, data) {
-  var faqRanked = rankRows_(question, data.faq, ['QUESTION', 'ANSWER', 'KEYWORDS', 'GROUP', 'SOURCE']);
-  var vanbanRanked = rankRows_(question, data.vanban, ['NỘI DUNG', 'NOI DUNG', 'TÊN VĂN BẢN', 'TEN VAN BAN', 'SỐ VĂN BẢN', 'SO VAN BAN']);
-  var faqMatches = faqRanked.filter(function (item) { return item.score > 0; });
-  var vanbanMatches = vanbanRanked.filter(function (item) { return item.score > 0; });
-  return { faq: (faqMatches.length ? faqMatches : faqRanked).slice(0, 5).map(function (item) { return item.row; }), vanban: (vanbanMatches.length ? vanbanMatches : vanbanRanked).slice(0, 5).map(function (item) { return item.row; }) };
+  var faqRanked = rankRows_(question, data.faq, ['QUESTION', 'ANSWER', 'KEYWORDS', 'GROUP', 'SOURCE'])
+    .filter(function (item) { return item.score >= MIN_AI_CONTEXT_SCORE; });
+  var vanbanRanked = rankRows_(question, data.vanban, ['NỘI DUNG', 'NOI DUNG', 'TÊN VĂN BẢN', 'TEN VAN BAN', 'SỐ VĂN BẢN', 'SO VAN BAN'])
+    .filter(function (item) { return item.score >= MIN_AI_CONTEXT_SCORE; });
+  return {
+    faq: faqRanked.slice(0, 5).map(function (item) { return item.row; }),
+    vanban: vanbanRanked.slice(0, 5).map(function (item) { return item.row; })
+  };
+}
+
+function hasRelevantContext_(data) {
+  return !!((data.faq && data.faq.length) || (data.vanban && data.vanban.length));
 }
 
 function rankRows_(question, rows, keys) {
@@ -165,11 +175,13 @@ function rankRows_(question, rows, keys) {
   var questionHasRegistrationIntent = /\b(dang ky|ho so dang ky|xac nhan dang ky)\b/.test(normalizedQuestion);
   return rows.map(function (row, index) {
     var haystack = normalizeText_(keys.map(function (key) { return row[key] || ''; }).join(' '));
+    if (!passesMandatoryIntent_(normalizedQuestion, haystack)) return { row: row, score: -999, index: index };
     var score = normalizedQuestion && haystack.indexOf(normalizedQuestion) >= 0 ? 80 : 0;
     var rowHasReportIntent = /\bbao cao\b/.test(haystack);
     var rowHasRegistrationIntent = /\b(dang ky|ho so dang ky|xac nhan dang ky)\b/.test(haystack);
     tokens.forEach(function (token) { if (haystack.indexOf(token) >= 0) score += token.length > 3 ? 3 : 1; });
     importantPhrases.forEach(function (phrase) { if (haystack.indexOf(phrase) >= 0) score += phrase.split(' ').length * 12; });
+    if (importantPhrases.length && !importantPhrases.some(function (phrase) { return haystack.indexOf(phrase) >= 0; })) score -= 45;
     if (!questionHasChangeIntent && /\b(thay doi|dieu chinh)\b/.test(haystack)) score -= 35;
     if (questionHasReportIntent && !rowHasReportIntent) score -= 90;
     if (questionHasReportIntent && rowHasRegistrationIntent && !rowHasReportIntent) score -= 60;
@@ -178,12 +190,32 @@ function rankRows_(question, rows, keys) {
   }).sort(function (a, b) { if (b.score !== a.score) return b.score - a.score; return a.index - b.index; });
 }
 
+function passesMandatoryIntent_(normalizedQuestion, haystack) {
+  if (normalizedQuestion.indexOf('chi tra ngoai te') >= 0 && haystack.indexOf('chi tra ngoai te') < 0) return false;
+  if (normalizedQuestion.indexOf('giay chung nhan chi tra') >= 0 && haystack.indexOf('giay chung nhan chi tra') < 0) return false;
+  if ((normalizedQuestion.indexOf('thanh phan ho so') >= 0 || normalizedQuestion.indexOf('ho so de nghi') >= 0) && haystack.indexOf('ho so') < 0 && haystack.indexOf('thanh phan') < 0) return false;
+  return true;
+}
+
 function buildImportantPhrases_(normalizedQuestion) {
-  var words = normalizedQuestion.split(' ').filter(function (word) { return word.length >= 2; });
-  var phrases = [];
-  for (var size = Math.min(5, words.length); size >= 2; size -= 1) for (var index = 0; index <= words.length - size; index += 1) phrases.push(words.slice(index, index + size).join(' '));
-  ['dang ky khoan vay', 'thoi han dang ky', 'dang ky vay nuoc ngoai', 'ho so dang ky', 'bao cao vay', 'nop bao cao', 'cham nop bao cao', 'bao cao qua han', 'bao cao tre han', 'nop bao cao tre han'].forEach(function (phrase) { if (normalizedQuestion.indexOf(phrase) >= 0 && phrases.indexOf(phrase) === -1) phrases.push(phrase); });
-  return phrases;
+  var phrases = [
+    'dang ky khoan vay',
+    'thoi han dang ky',
+    'dang ky vay nuoc ngoai',
+    'ho so dang ky',
+    'dang ky thay doi',
+    'bao cao vay',
+    'nop bao cao',
+    'cham nop bao cao',
+    'bao cao qua han',
+    'bao cao tre han',
+    'nop bao cao tre han',
+    'chi tra ngoai te',
+    'giay chung nhan chi tra',
+    'thanh phan ho so',
+    'ho so de nghi'
+  ];
+  return phrases.filter(function (phrase) { return normalizedQuestion.indexOf(phrase) >= 0; });
 }
 
 function buildContext_(data) {
