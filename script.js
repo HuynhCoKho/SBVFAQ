@@ -178,7 +178,7 @@
   function askAppsScript(question) {
     return fetchAppsScript({
       question: question
-    }, 25000);
+    }, 90000);
   }
 
   function loadRemoteLinks() {
@@ -206,7 +206,7 @@
       var waitSeconds = Math.round((timeoutMs || 30000) / 1000);
       var timer = window.setTimeout(function () {
         cleanup();
-        reject(new Error('Mình chưa nhận được phản hồi từ Apps Script sau ' + waitSeconds + ' giây. Bạn có thể tra cứu văn bản quy định theo chủ đề tại panel bên trái, hoặc thử lại sau khi kiểm tra bản deploy Apps Script.'));
+        reject(new Error('Apps Script chưa phản hồi sau ' + waitSeconds + ' giây. Đây là lỗi xử lý/chờ phản hồi, không có nghĩa là không có dữ liệu. Vui lòng thử lại hoặc kiểm tra bản deploy Apps Script.')); 
       }, timeoutMs || 30000);
 
       function cleanup() {
