@@ -14,6 +14,7 @@
   var momoQrImage = document.getElementById('momoQrImage');
   var qrFallback = document.getElementById('qrFallback');
   var requestId = 0;
+  var conversationHistory = [];
 
   function setStatus(text, mode) {
     statusBadge.textContent = text;
@@ -175,9 +176,25 @@
     return payload.answer || payload.response || payload.text || JSON.stringify(payload, null, 2);
   }
 
+  function compactHistoryText(text, maxLength) {
+    text = String(text || '').replace(/\s+/g, ' ').trim();
+    return text.length > maxLength ? text.slice(0, maxLength).trim() + '...' : text;
+  }
+
+  function rememberTurn(question, answer) {
+    conversationHistory.push({
+      question: compactHistoryText(question, 260),
+      answer: compactHistoryText(answer, 520)
+    });
+    if (conversationHistory.length > 5) {
+      conversationHistory = conversationHistory.slice(conversationHistory.length - 5);
+    }
+  }
+
   function askAppsScript(question) {
     return fetchAppsScript({
-      question: question
+      question: question,
+      history: JSON.stringify(conversationHistory)
     }, 90000);
   }
 
@@ -250,7 +267,9 @@
     askAppsScript(question)
       .then(function (payload) {
         removeMessage(thinkingMessage);
-        addMessage('bot', normalizeResponse(payload));
+        var answer = normalizeResponse(payload);
+        addMessage('bot', answer);
+        if (payload && payload.ok !== false) rememberTurn(question, answer);
         setStatus('Đã kết nối', 'ok');
       })
       .catch(function (error) {
