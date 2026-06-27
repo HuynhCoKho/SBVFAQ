@@ -4,7 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v13';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v14';
 var DIRECT_FAQ_MIN_SCORE = 36;
 var DIRECT_FAQ_STRONG_SCORE = 95;
 var MIN_AI_CONTEXT_SCORE = 28;
@@ -116,9 +116,9 @@ function buildLookupQuestion_(question, history) {
   history = history || [];
   if (!history.length || !shouldUseHistoryForLookup_(question)) return question;
   var recent = history.slice(-3).map(function (turn) {
-    return [turn.question, turn.answer].filter(Boolean).join(' ');
+    return turn.question || '';
   }).join(' ');
-  return (recent + ' ' + question).trim();
+  return (question + ' ' + recent).trim();
 }
 
 function shouldUseHistoryForLookup_(question) {
@@ -300,6 +300,9 @@ function buildImportantPhrases_(normalizedQuestion) {
   var phrases = [
     'dang ky khoan vay',
     'thoi han dang ky',
+    'thoi han nop',
+    'thoi han gui ho so',
+    'han nop ho so',
     'dang ky vay nuoc ngoai',
     'ho so dang ky',
     'ho so thay doi',
