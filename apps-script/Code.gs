@@ -4,7 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v14';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v15';
 var DIRECT_FAQ_MIN_SCORE = 36;
 var DIRECT_FAQ_STRONG_SCORE = 95;
 var MIN_AI_CONTEXT_SCORE = 28;
@@ -125,7 +125,7 @@ function shouldUseHistoryForLookup_(question) {
   var normalized = normalizeText_(question);
   if (!normalized) return false;
   var tokens = normalized.split(' ').filter(function (token) { return token.length >= 2; });
-  var hasStrongTopic = /(vay tra no|vay nuoc ngoai|dai ly doi ngoai te|chi tra ngoai te|bao cao|dang ky khoan vay|dang ky thay doi|mo tai khoan|phat hanh trai phieu|dau tu truc tiep|dau tu gian tiep)/.test(normalized);
+  var hasStrongTopic = /(cho vay ra nuoc ngoai|cho vay nguoi khong cu tru|thu hoi no bao lanh|vay tra no|vay nuoc ngoai|dai ly doi ngoai te|chi tra ngoai te|bao cao|dang ky khoan vay|dang ky thay doi|mo tai khoan|phat hanh trai phieu|dau tu truc tiep|dau tu gian tiep)/.test(normalized);
   var looksFollowUp = tokens.length <= 8 || /(truong hop nay|noi tren|vay thi|the thi|con|van de nay|thu tuc nay|ho so nay|thoi han|muc phat|che tai|can nop gi|gom nhung gi|nhu the nao|co phai khong|co can khong)/.test(normalized);
   return looksFollowUp && !hasStrongTopic;
 }
@@ -170,7 +170,7 @@ function askAi_(question, data, history) {
   if (!hasRelevantContext_(relevantData)) return NO_DATA_ANSWER;
   var context = buildContext_(relevantData);
   var historyText = buildHistoryText_(history);
-  var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Hãy đọc nghĩa toàn bộ câu hỏi, so sánh tất cả mục dữ liệu được cung cấp, rồi chọn mục phù hợp nhất; không chọn mục chỉ vì có vài cụm từ trùng. Nếu câu hỏi hiện tại là câu hỏi nối tiếp, hãy hiểu nó theo lịch sử cuộc trò chuyện; nếu câu hỏi hiện tại có chủ đề riêng rõ ràng thì ưu tiên câu hỏi hiện tại. Không được tự lấy kiến thức ngoài dữ liệu để bù vào chỗ thiếu. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt câu hỏi hỏi thành phần hồ sơ/hồ sơ gồm gì với câu hỏi hỏi thời hạn/hạn nộp hồ sơ. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nLỊCH SỬ CUỘC TRÒ CHUYỆN GẦN ĐÂY:\n' + historyText + '\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
+  var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Hãy đọc nghĩa toàn bộ câu hỏi, so sánh tất cả mục dữ liệu được cung cấp, rồi chọn mục phù hợp nhất; không chọn mục chỉ vì có vài cụm từ trùng. Nếu câu hỏi hiện tại là câu hỏi nối tiếp, hãy hiểu nó theo lịch sử cuộc trò chuyện; nếu câu hỏi hiện tại có chủ đề riêng rõ ràng thì ưu tiên câu hỏi hiện tại. Không được tự lấy kiến thức ngoài dữ liệu để bù vào chỗ thiếu. Phải phân biệt "cho vay ra nước ngoài" với "vay/trả nợ nước ngoài": "cho vay ra nước ngoài" là người cư trú cho người không cư trú vay, không được trả lời bằng thủ tục doanh nghiệp đăng ký khoản vay nước ngoài. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt câu hỏi hỏi thành phần hồ sơ/hồ sơ gồm gì với câu hỏi hỏi thời hạn/hạn nộp hồ sơ. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nLỊCH SỬ CUỘC TRÒ CHUYỆN GẦN ĐÂY:\n' + historyText + '\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
   var response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
     method: 'post',
     contentType: 'application/json',
@@ -290,15 +290,32 @@ function escapeRegex_(value) {
 }
 
 function passesMandatoryIntent_(normalizedQuestion, haystack) {
+  if (isOutboundLendingQuestion_(normalizedQuestion) && !isOutboundLendingText_(haystack)) return false;
+  if (isForeignBorrowingQuestion_(normalizedQuestion) && isOutboundLendingText_(haystack)) return false;
   if (normalizedQuestion.indexOf('chi tra ngoai te') >= 0 && haystack.indexOf('chi tra ngoai te') < 0) return false;
   if (normalizedQuestion.indexOf('giay chung nhan chi tra') >= 0 && haystack.indexOf('giay chung nhan chi tra') < 0) return false;
   if ((normalizedQuestion.indexOf('thanh phan ho so') >= 0 || normalizedQuestion.indexOf('ho so de nghi') >= 0) && haystack.indexOf('ho so') < 0 && haystack.indexOf('thanh phan') < 0) return false;
   return true;
 }
 
+function isOutboundLendingQuestion_(normalizedQuestion) {
+  return /\b(cho vay ra nuoc ngoai|cho vay nguoi khong cu tru|thu hoi no bao lanh)\b/.test(normalizedQuestion);
+}
+
+function isOutboundLendingText_(text) {
+  return /\b(cho vay ra nuoc ngoai|cho vay nguoi khong cu tru|thu hoi no bao lanh|nguoi khong cu tru)\b/.test(text);
+}
+
+function isForeignBorrowingQuestion_(normalizedQuestion) {
+  return /\b(vay tra no nuoc ngoai|vay nuoc ngoai|khoan vay nuoc ngoai|dang ky khoan vay|dang ky thay doi khoan vay)\b/.test(normalizedQuestion) && !isOutboundLendingQuestion_(normalizedQuestion);
+}
+
 function buildImportantPhrases_(normalizedQuestion) {
   var phrases = [
     'dang ky khoan vay',
+    'cho vay ra nuoc ngoai',
+    'cho vay nguoi khong cu tru',
+    'thu hoi no bao lanh',
     'thoi han dang ky',
     'thoi han nop',
     'thoi han gui ho so',
