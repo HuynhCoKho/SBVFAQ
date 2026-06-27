@@ -4,7 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v10';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v11';
 var DIRECT_FAQ_MIN_SCORE = 36;
 var DIRECT_FAQ_STRONG_SCORE = 48;
 var MIN_AI_CONTEXT_SCORE = 28;
@@ -232,6 +232,7 @@ function hasRelevantContext_(data) {
 function rankRows_(question, rows, keys) {
   var normalizedQuestion = normalizeText_(question);
   var tokens = normalizedQuestion.split(' ').filter(function (token) { return token.length >= 2; });
+  var meaningfulTokens = tokens.filter(isMeaningfulToken_);
   var importantPhrases = buildImportantPhrases_(normalizedQuestion);
   var questionHasChangeIntent = /\b(thay doi|dieu chinh)\b/.test(normalizedQuestion);
   var questionHasReportIntent = /\bbao cao\b/.test(normalizedQuestion);
@@ -242,7 +243,13 @@ function rankRows_(question, rows, keys) {
     var score = normalizedQuestion && haystack.indexOf(normalizedQuestion) >= 0 ? 80 : 0;
     var rowHasReportIntent = /\bbao cao\b/.test(haystack);
     var rowHasRegistrationIntent = /\b(dang ky|ho so dang ky|xac nhan dang ky)\b/.test(haystack);
-    tokens.forEach(function (token) { if (haystack.indexOf(token) >= 0) score += token.length > 3 ? 3 : 1; });
+    tokens.forEach(function (token) { if (hasToken_(haystack, token)) score += token.length > 3 ? 4 : 2; });
+    var matchedMeaningfulTokens = meaningfulTokens.filter(function (token) { return hasToken_(haystack, token); });
+    if (meaningfulTokens.length >= 3) {
+      var coverage = matchedMeaningfulTokens.length / meaningfulTokens.length;
+      if (coverage >= 0.8) score += 38;
+      else if (coverage >= 0.6) score += 18;
+    }
     importantPhrases.forEach(function (phrase) { if (haystack.indexOf(phrase) >= 0) score += phrase.split(' ').length * 12; });
     if (importantPhrases.length && !importantPhrases.some(function (phrase) { return haystack.indexOf(phrase) >= 0; })) score -= 45;
     if (!questionHasChangeIntent && /\b(thay doi|dieu chinh)\b/.test(haystack)) score -= 35;
@@ -251,6 +258,24 @@ function rankRows_(question, rows, keys) {
     if (!questionHasRegistrationIntent && rowHasRegistrationIntent && !rowHasReportIntent) score -= 15;
     return { row: row, score: score, index: index };
   }).sort(function (a, b) { if (b.score !== a.score) return b.score - a.score; return a.index - b.index; });
+}
+
+function hasToken_(haystack, token) {
+  return new RegExp('(^| )' + escapeRegex_(token) + '( |$)').test(haystack);
+}
+
+function isMeaningfulToken_(token) {
+  if (!token || token.length < 3) return false;
+  var stopwords = {
+    'nay': true, 'kia': true, 'thi': true, 'the': true, 'nao': true, 'sao': true,
+    'khong': true, 'co': true, 'can': true, 'phai': true, 'duoc': true, 'cho': true,
+    'voi': true, 'cua': true, 'trong': true, 'theo': true, 'neu': true, 've': true
+  };
+  return !stopwords[token];
+}
+
+function escapeRegex_(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function passesMandatoryIntent_(normalizedQuestion, haystack) {
@@ -266,7 +291,11 @@ function buildImportantPhrases_(normalizedQuestion) {
     'thoi han dang ky',
     'dang ky vay nuoc ngoai',
     'ho so dang ky',
+    'ho so thay doi',
+    'thay doi khoan vay',
     'dang ky thay doi',
+    'dang ky thay doi khoan vay',
+    'ho so dang ky thay doi',
     'bao cao vay',
     'nop bao cao',
     'cham nop bao cao',
