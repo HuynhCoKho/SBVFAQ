@@ -4,7 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v9';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v10';
 var DIRECT_FAQ_MIN_SCORE = 36;
 var DIRECT_FAQ_STRONG_SCORE = 48;
 var MIN_AI_CONTEXT_SCORE = 28;
@@ -15,6 +15,7 @@ function doGet(e) {
   var action = String(params.action || '').trim().toLowerCase();
   var question = String(params.question || '').trim();
   var callback = String(params.callback || '').trim();
+  var history = parseHistory_(params.history);
 
   if (action === 'links') {
     try {
@@ -31,7 +32,7 @@ function doGet(e) {
 
   try {
     var data = loadKnowledge_();
-    var answer = askAi_(question, data);
+    var answer = askAi_(question, data, history);
     appendLog_(question, answer, { asker: 'API/GitHub Pages', source: callback ? 'JSONP' : 'Direct API' });
     return output_(callback, { ok: true, question: question, answer: answer });
   } catch (err) {
@@ -47,7 +48,7 @@ function askFromUi(question, clientInfo) {
   if (!question) return { ok: false, error: 'Vui lòng nhập câu hỏi.' };
   try {
     var data = loadKnowledge_();
-    var answer = askAi_(question, data);
+    var answer = askAi_(question, data, parseHistory_(clientInfo.history));
     appendLog_(question, answer, { asker: clientInfo.asker || 'Ẩn danh', source: 'Apps Script Web App', userAgent: clientInfo.userAgent || '' });
     return { ok: true, question: question, answer: answer };
   } catch (err) {
@@ -92,6 +93,51 @@ function loadLinks_() {
   };
 }
 
+function parseHistory_(value) {
+  if (!value) return [];
+  try {
+    var parsed = Array.isArray(value) ? value : JSON.parse(String(value));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.slice(-5).map(function (turn) {
+      return {
+        question: compactText_(turn && turn.question, 260),
+        answer: compactText_(turn && turn.answer, 520)
+      };
+    }).filter(function (turn) {
+      return turn.question || turn.answer;
+    });
+  } catch (err) {
+    return [];
+  }
+}
+
+function buildLookupQuestion_(question, history) {
+  question = String(question || '').trim();
+  history = history || [];
+  if (!history.length || !shouldUseHistoryForLookup_(question)) return question;
+  var recent = history.slice(-3).map(function (turn) {
+    return [turn.question, turn.answer].filter(Boolean).join(' ');
+  }).join(' ');
+  return (recent + ' ' + question).trim();
+}
+
+function shouldUseHistoryForLookup_(question) {
+  var normalized = normalizeText_(question);
+  if (!normalized) return false;
+  var tokens = normalized.split(' ').filter(function (token) { return token.length >= 2; });
+  var hasStrongTopic = /(vay tra no|vay nuoc ngoai|dai ly doi ngoai te|chi tra ngoai te|bao cao|dang ky khoan vay|dang ky thay doi|mo tai khoan|phat hanh trai phieu|dau tu truc tiep|dau tu gian tiep)/.test(normalized);
+  var looksFollowUp = tokens.length <= 8 || /(truong hop nay|noi tren|vay thi|the thi|con|van de nay|thu tuc nay|ho so nay|thoi han|muc phat|che tai|can nop gi|gom nhung gi|nhu the nao|co phai khong|co can khong)/.test(normalized);
+  return looksFollowUp && !hasStrongTopic;
+}
+
+function buildHistoryText_(history) {
+  history = history || [];
+  if (!history.length) return '(Không có lịch sử trước đó)';
+  return history.slice(-5).map(function (turn, index) {
+    return 'Lượt ' + (index + 1) + '\nNgười dùng: ' + (turn.question || '') + '\nAI: ' + (turn.answer || '');
+  }).join('\n---\n');
+}
+
 function readSheetObjects_(spreadsheet, sheetName) {
   var sheet = spreadsheet.getSheetByName(sheetName);
   if (!sheet) throw new Error('Không tìm thấy sheet ' + sheetName);
@@ -113,16 +159,18 @@ function readSheetObjects_(spreadsheet, sheetName) {
   });
 }
 
-function askAi_(question, data) {
-  var directAnswer = answerDirectlyFromFaq_(question, data.faq);
+function askAi_(question, data, history) {
+  var lookupQuestion = buildLookupQuestion_(question, history);
+  var directAnswer = answerDirectlyFromFaq_(lookupQuestion, data.faq);
   if (directAnswer) return finalizeAnswer_(question, directAnswer);
   var apiKey = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
   if (!apiKey) throw new Error('Chưa cấu hình OPENAI_API_KEY trong Apps Script > Project Settings > Script properties.');
   var model = PropertiesService.getScriptProperties().getProperty('OPENAI_MODEL') || 'gpt-4o-mini';
-  var relevantData = selectRelevantData_(question, data);
+  var relevantData = selectRelevantData_(lookupQuestion, data);
   if (!hasRelevantContext_(relevantData)) return NO_DATA_ANSWER;
   var context = buildContext_(relevantData);
-  var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
+  var historyText = buildHistoryText_(history);
+  var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Nếu câu hỏi hiện tại là câu hỏi nối tiếp, hãy hiểu nó theo lịch sử cuộc trò chuyện; nếu câu hỏi hiện tại có chủ đề riêng rõ ràng thì ưu tiên câu hỏi hiện tại. Không được tự lấy kiến thức ngoài dữ liệu để bù vào chỗ thiếu. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nLỊCH SỬ CUỘC TRÒ CHUYỆN GẦN ĐÂY:\n' + historyText + '\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
   var response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
     method: 'post',
     contentType: 'application/json',
