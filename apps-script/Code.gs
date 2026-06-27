@@ -4,9 +4,9 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v12';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v13';
 var DIRECT_FAQ_MIN_SCORE = 36;
-var DIRECT_FAQ_STRONG_SCORE = 48;
+var DIRECT_FAQ_STRONG_SCORE = 95;
 var MIN_AI_CONTEXT_SCORE = 28;
 var NO_DATA_ANSWER = 'Mình chưa tìm thấy dữ liệu đủ tin cậy trong FAQ/VANBAN hiện có để trả lời câu hỏi này. Bạn có thể tra cứu văn bản quy định theo chủ đề tại panel bên trái.';
 
@@ -170,7 +170,7 @@ function askAi_(question, data, history) {
   if (!hasRelevantContext_(relevantData)) return NO_DATA_ANSWER;
   var context = buildContext_(relevantData);
   var historyText = buildHistoryText_(history);
-  var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Nếu câu hỏi hiện tại là câu hỏi nối tiếp, hãy hiểu nó theo lịch sử cuộc trò chuyện; nếu câu hỏi hiện tại có chủ đề riêng rõ ràng thì ưu tiên câu hỏi hiện tại. Không được tự lấy kiến thức ngoài dữ liệu để bù vào chỗ thiếu. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nLỊCH SỬ CUỘC TRÒ CHUYỆN GẦN ĐÂY:\n' + historyText + '\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
+  var prompt = 'Bạn là chatbot tra cứu quy định NHNN. Chỉ trả lời dựa trên dữ liệu FAQ và VANBAN được cung cấp. Ưu tiên FAQ trước. Hãy đọc nghĩa toàn bộ câu hỏi, so sánh tất cả mục dữ liệu được cung cấp, rồi chọn mục phù hợp nhất; không chọn mục chỉ vì có vài cụm từ trùng. Nếu câu hỏi hiện tại là câu hỏi nối tiếp, hãy hiểu nó theo lịch sử cuộc trò chuyện; nếu câu hỏi hiện tại có chủ đề riêng rõ ràng thì ưu tiên câu hỏi hiện tại. Không được tự lấy kiến thức ngoài dữ liệu để bù vào chỗ thiếu. Phải phân biệt đăng ký khoản vay với đăng ký thay đổi khoản vay. Phải phân biệt câu hỏi hỏi thành phần hồ sơ/hồ sơ gồm gì với câu hỏi hỏi thời hạn/hạn nộp hồ sơ. Phải phân biệt nghĩa vụ báo cáo với thủ tục đăng ký/hồ sơ đăng ký khoản vay; nếu người dùng hỏi về báo cáo, nộp báo cáo, báo cáo quá hạn hoặc báo cáo trễ hạn thì không dùng nội dung về nộp hồ sơ đăng ký khoản vay làm câu trả lời chính, trừ khi dữ liệu đó cũng nói rõ về báo cáo. Riêng thông báo báo cáo bị ghi quá hạn do chuyển đổi dữ liệu sang Trang điện tử chỉ là ngoại lệ theo đúng kỳ/thời điểm được thông báo; không khái quát thành mọi báo cáo nộp trễ đều không sao. Nếu dữ liệu có link dạng [tên link](URL) hoặc URL thì giữ nguyên link. Cuối câu trả lời luôn có dòng Nguồn: ...\n\nLỊCH SỬ CUỘC TRÒ CHUYỆN GẦN ĐÂY:\n' + historyText + '\n\nDỮ LIỆU FAQ/VANBAN:\n' + context + '\n\nCÂU HỎI NGƯỜI DÙNG:\n' + question;
   var response = UrlFetchApp.fetch('https://api.openai.com/v1/chat/completions', {
     method: 'post',
     contentType: 'application/json',
@@ -194,8 +194,8 @@ function answerDirectlyFromFaq_(question, faqRows) {
   var topHaystack = normalizeText_([pick_(top.row, ['QUESTION']), pick_(top.row, ['KEYWORDS']), pick_(top.row, ['GROUP']), pick_(top.row, ['SOURCE'])].join(' '));
   var exactish = normalizedTopQuestion && (normalizedTopQuestion.indexOf(normalizedQuestion) >= 0 || normalizedQuestion.indexOf(normalizedTopQuestion) >= 0);
   var strongPhraseMatch = hasImportantPhraseMatch_(normalizedQuestion, topHaystack);
-  var clearlyAhead = !second || top.score - second.score >= 8;
-  if (!exactish && !strongPhraseMatch && !clearlyAhead && top.score < DIRECT_FAQ_STRONG_SCORE) return '';
+  var clearlyAhead = !second || top.score - second.score >= 25;
+  if (!exactish) return '';
   var answer = pick_(top.row, ['ANSWER', 'CÂU TRẢ LỜI', 'CAU TRA LOI']);
   if (!answer) return '';
   var source = pick_(top.row, ['SOURCE', 'NGUỒN', 'NGUON']) || (pick_(top.row, ['ID']) ? 'FAQ #' + pick_(top.row, ['ID']) : 'FAQ');
@@ -213,15 +213,15 @@ function selectRelevantData_(question, data) {
     .filter(function (item) { return item.score >= MIN_AI_CONTEXT_SCORE; });
   if (faqRanked.length) {
     return {
-      faq: faqRanked.slice(0, 5).map(function (item) { return item.row; }),
+      faq: faqRanked.slice(0, 8).map(function (item) { return item.row; }),
       vanban: []
     };
   }
   var vanbanRanked = rankRows_(question, data.vanban, ['NỘI DUNG', 'NOI DUNG', 'TÊN VĂN BẢN', 'TEN VAN BAN', 'SỐ VĂN BẢN', 'SO VAN BAN'])
     .filter(function (item) { return item.score >= MIN_AI_CONTEXT_SCORE; });
   return {
-    faq: faqRanked.slice(0, 5).map(function (item) { return item.row; }),
-    vanban: vanbanRanked.slice(0, 5).map(function (item) { return item.row; })
+    faq: faqRanked.slice(0, 8).map(function (item) { return item.row; }),
+    vanban: vanbanRanked.slice(0, 8).map(function (item) { return item.row; })
   };
 }
 
@@ -322,8 +322,8 @@ function buildImportantPhrases_(normalizedQuestion) {
 }
 
 function buildContext_(data) {
-  var faqText = data.faq.slice(0, 5).map(function (row, index) { return ['MÃ THAM CHIẾU: FAQ #' + (index + 1), 'GROUP: ' + pick_(row, ['GROUP']), 'QUESTION: ' + pick_(row, ['QUESTION']), 'ANSWER: ' + compactText_(pick_(row, ['ANSWER']), 1600), 'NGUỒN TRÍCH DẪN: ' + pick_(row, ['SOURCE', 'NGUỒN', 'NGUON']), 'KEYWORDS: ' + pick_(row, ['KEYWORDS'])].join('\n'); }).join('\n---\n');
-  var vanbanText = data.vanban.slice(0, 5).map(function (row, index) {
+  var faqText = data.faq.slice(0, 8).map(function (row, index) { return ['MÃ THAM CHIẾU: FAQ #' + (index + 1), 'GROUP: ' + pick_(row, ['GROUP']), 'QUESTION: ' + pick_(row, ['QUESTION']), 'ANSWER: ' + compactText_(pick_(row, ['ANSWER']), 1600), 'NGUỒN TRÍCH DẪN: ' + pick_(row, ['SOURCE', 'NGUỒN', 'NGUON']), 'KEYWORDS: ' + pick_(row, ['KEYWORDS'])].join('\n'); }).join('\n---\n');
+  var vanbanText = data.vanban.slice(0, 8).map(function (row, index) {
     var soVanBan = pick_(row, ['SỐ VĂN BẢN', 'SO VAN BAN']);
     var tenVanBan = pick_(row, ['TÊN VĂN BẢN', 'TEN VAN BAN']);
     var diemKhoanDieu = [formatPart_('Điểm', pick_(row, ['ĐIỂM', 'DIEM'])), formatPart_('Khoản', pick_(row, ['KHOẢN', 'KHOAN'])), formatPart_('Điều', pick_(row, ['ĐIỀU', 'DIEU']))].filter(Boolean).join(', ');
