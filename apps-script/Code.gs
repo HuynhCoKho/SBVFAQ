@@ -4,7 +4,7 @@ var VANBAN_SHEET_NAME = 'VANBAN';
 var LOG_SHEET_NAME = 'LOG';
 var LINKS_SHEET_NAME = 'LINKS';
 var CACHE_TTL_SECONDS = 300;
-var KNOWLEDGE_CACHE_KEY = 'knowledge-v11';
+var KNOWLEDGE_CACHE_KEY = 'knowledge-v12';
 var DIRECT_FAQ_MIN_SCORE = 36;
 var DIRECT_FAQ_STRONG_SCORE = 48;
 var MIN_AI_CONTEXT_SCORE = 28;
@@ -237,12 +237,15 @@ function rankRows_(question, rows, keys) {
   var questionHasChangeIntent = /\b(thay doi|dieu chinh)\b/.test(normalizedQuestion);
   var questionHasReportIntent = /\bbao cao\b/.test(normalizedQuestion);
   var questionHasRegistrationIntent = /\b(dang ky|ho so dang ky|xac nhan dang ky)\b/.test(normalizedQuestion);
+  var questionAsksFileContents = asksFileContents_(normalizedQuestion);
   return rows.map(function (row, index) {
     var haystack = normalizeText_(keys.map(function (key) { return row[key] || ''; }).join(' '));
     if (!passesMandatoryIntent_(normalizedQuestion, haystack)) return { row: row, score: -999, index: index };
     var score = normalizedQuestion && haystack.indexOf(normalizedQuestion) >= 0 ? 80 : 0;
     var rowHasReportIntent = /\bbao cao\b/.test(haystack);
     var rowHasRegistrationIntent = /\b(dang ky|ho so dang ky|xac nhan dang ky)\b/.test(haystack);
+    var rowHasFileContents = /\b(thanh phan ho so|bao gom|don dang ky|thoa thuan|van ban xac nhan|tai lieu|giay to)\b/.test(haystack);
+    var rowHasDeadlineIntent = /\b(thoi han|han nop|gui ho so|nop ho so|ngay lam viec|truoc thoi diem|ke tu ngay)\b/.test(haystack);
     tokens.forEach(function (token) { if (hasToken_(haystack, token)) score += token.length > 3 ? 4 : 2; });
     var matchedMeaningfulTokens = meaningfulTokens.filter(function (token) { return hasToken_(haystack, token); });
     if (meaningfulTokens.length >= 3) {
@@ -252,12 +255,20 @@ function rankRows_(question, rows, keys) {
     }
     importantPhrases.forEach(function (phrase) { if (haystack.indexOf(phrase) >= 0) score += phrase.split(' ').length * 12; });
     if (importantPhrases.length && !importantPhrases.some(function (phrase) { return haystack.indexOf(phrase) >= 0; })) score -= 45;
+    if (questionAsksFileContents && rowHasFileContents) score += 55;
+    if (questionAsksFileContents && rowHasDeadlineIntent && !rowHasFileContents) score -= 70;
     if (!questionHasChangeIntent && /\b(thay doi|dieu chinh)\b/.test(haystack)) score -= 35;
     if (questionHasReportIntent && !rowHasReportIntent) score -= 90;
     if (questionHasReportIntent && rowHasRegistrationIntent && !rowHasReportIntent) score -= 60;
     if (!questionHasRegistrationIntent && rowHasRegistrationIntent && !rowHasReportIntent) score -= 15;
     return { row: row, score: score, index: index };
   }).sort(function (a, b) { if (b.score !== a.score) return b.score - a.score; return a.index - b.index; });
+}
+
+function asksFileContents_(normalizedQuestion) {
+  var asksAboutFile = /\b(ho so|thanh phan|giay to|tai lieu|can nop gi|gom nhung gi|bao gom)\b/.test(normalizedQuestion);
+  var asksAboutDeadline = /\b(thoi han|han nop|bao lau|khi nao|ngay nao|tre han|qua han)\b/.test(normalizedQuestion);
+  return asksAboutFile && !asksAboutDeadline;
 }
 
 function hasToken_(haystack, token) {
